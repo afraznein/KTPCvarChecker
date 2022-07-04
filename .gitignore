@@ -1,3 +1,9 @@
-
 list1.txt
 list2.txt
+ServerKeysLocal.cs
+[B]bin
+[O]obj
+bin
+obj
+.vs
+PublishProfiles

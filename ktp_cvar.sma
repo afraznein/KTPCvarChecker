@@ -322,8 +322,8 @@ public client_putinserver ( id )
 		gb_StopChecking[id] = false;
 		gi_numofattempts[id] = 0;
 		gi_cvarnumID[id] = -1;
-		set_task ( 5.0, "fn_msginitial", id );
-		set_task ( 5.0, "fn_loopquerries", id );
+		set_task ( 10.0, "fn_msginitial", id );
+		set_task ( 10.0, "fn_loopquerries", id );
 	}
 }
 
@@ -348,7 +348,7 @@ public fn_loopquerries ( id )
 public fn_query ( id )
 {
 	gi_cvarnumID[id]++
-	if ( gi_cvarnumID[id] < 65 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
+	if ( gi_cvarnumID[id] < 64 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
 }
 
 public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
