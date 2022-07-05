@@ -348,7 +348,7 @@ public fn_loopquerries ( id )
 public fn_query ( id )
 {
 	gi_cvarnumID[id]++
-	if ( gi_cvarnumID[id] < 64 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
+	if ( gi_cvarnumID[id] < 63 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
 }
 
 public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
@@ -434,7 +434,7 @@ public fn_fcoslogshow ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float
 		//client_print(0, print_chat, "Attempted to overrwite %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
 		//client_print(0, print_console, "Attempted to overrwite %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
 		
-		log_amx ( "%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logname, gs_logauthid, gs_logip, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+		log_amx ( "%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
 		
 		get_players ( gi_players, gi_playercnt, "ch" ) //ch removes bot (c) and hltv proxy (h)
 		

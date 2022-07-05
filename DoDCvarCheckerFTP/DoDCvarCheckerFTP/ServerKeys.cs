@@ -28,17 +28,17 @@ namespace DoDCvarCheckerFTP {
         public static readonly string NineteenEleven_DALOne_USERNAME = "";
         public static readonly string NineteenEleven_DALOne_PASSWORD = "";
 
-        //public static readonly string NineteenEleven_NYOne_HOSTNAME = "";
-        //public static readonly string NineteenEleven_NYOne_IP = "";
-        //public static readonly string NineteenEleven_NYOne_PORT = "";
-        //public static readonly string NineteenEleven_NYOne_USERNAME = "";
-        //public static readonly string NineteenEleven_NYOne_PASSWORD = "";
+        public static readonly string NineteenEleven_NYOne_HOSTNAME = "";
+        public static readonly string NineteenEleven_NYOne_IP = "";
+        public static readonly string NineteenEleven_NYOne_PORT = "";
+        public static readonly string NineteenEleven_NYOne_USERNAME = "";
+        public static readonly string NineteenEleven_NYOne_PASSWORD = "";
 
-        //public static readonly string CORYBBJ_HOSTNAME = "";
-        //public static readonly string CORYBBJ_IP = "";
-        //public static readonly string CORYBBJ_PORT = "";
-        //public static readonly string CORYBBJ_USERNAME = "";
-        //public static readonly string CORYBBJ_PASSWORD = "";
+        public static readonly string CORYBBJ_HOSTNAME = "";
+        public static readonly string CORYBBJ_IP = "";
+        public static readonly string CORYBBJ_PORT = "";
+        public static readonly string CORYBBJ_USERNAME = "";
+        public static readonly string CORYBBJ_PASSWORD = "";
 
         public static readonly string MTP_NY_HOSTNAME = "";
         public static readonly string MTP_NY_IP = "";
@@ -46,11 +46,11 @@ namespace DoDCvarCheckerFTP {
         public static readonly string MTP_NY_USERNAME = "";
         public static readonly string MTP_NY_PASSWORD = "";
 
-        //public static readonly string MTP_AL_HOSTNAME = "";
-        //public static readonly string MTP_AL_IP = "";
-        //public static readonly string MTP_AL_PORT = "";
-        //public static readonly string MTP_AL_USERNAME = "";
-        //public static readonly string MTP_AL_PASSWORD = "";
+        public static readonly string MTP_AL_HOSTNAME = "";
+        public static readonly string MTP_AL_IP = "";
+        public static readonly string MTP_AL_PORT = "";
+        public static readonly string MTP_AL_USERNAME = "";
+        public static readonly string MTP_AL_PASSWORD = "";
 
         public static readonly string Thunder_CHI_HOSTNAME = "";
         public static readonly string Thunder_CHI_IP = "";

@@ -13,10 +13,12 @@ namespace DoDCvarCheckerFTP {
         public static HashSet<string> LogFilesNew = new HashSet<string>();
         public static HashSet<string> LogFilesNew2 = new HashSet<string>();
         public static HashSet<string> LogLines = new HashSet<string>();
+        public static Dictionary<string, List<string>> SteamIDDictionary = new Dictionary<string, List<string>>();
         static void Main(string[] args) {
 
 
             while (true){
+                Console.WriteLine("KTP Cvar Checker FTP. Version 07.05.22 Nein_");
                 Console.WriteLine("1. Get status of all of the files, last modified date.");
                 Console.WriteLine("2. FTP Update for CVAR Checker");
                 Console.WriteLine("3. Pull logs");
@@ -59,10 +61,10 @@ namespace DoDCvarCheckerFTP {
             FTP_Update(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHIOne_PORT),ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
             FTP_Update(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHIThree_PORT),ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
             FTP_Update(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_DALOne_PORT),ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            //FTP_Update(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_NYOne_PORT),ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            //FTP_Update(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, Convert.ToInt32(ServerKeys.CORYBBJ_PORT),ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            FTP_Update(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_NYOne_PORT),ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
+            FTP_Update(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, Convert.ToInt32(ServerKeys.CORYBBJ_PORT),ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
             FTP_Update(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, Convert.ToInt32(ServerKeys.MTP_NY_PORT),ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            //FTP_Update(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, Convert.ToInt32(ServerKeys.MTP_AL_PORT),ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            FTP_Update(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, Convert.ToInt32(ServerKeys.MTP_AL_PORT),ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
             FTP_Update(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, Convert.ToInt32(ServerKeys.Thunder_NY_PORT),ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
             FTP_Update(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, Convert.ToInt32(ServerKeys.Thunder_CHI_PORT),ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
         }
@@ -102,10 +104,10 @@ namespace DoDCvarCheckerFTP {
             FTP_DownloadLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
             FTP_DownloadLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
             FTP_DownloadLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            //FTP_DownloadLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            //FTP_DownloadLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            FTP_DownloadLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
+            FTP_DownloadLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
             FTP_DownloadLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            //FTP_DownloadLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            FTP_DownloadLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
             FTP_DownloadLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
             FTP_DownloadLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
         }
@@ -173,6 +175,17 @@ namespace DoDCvarCheckerFTP {
                 string[] s = str.Split("\r\n");
                 for (int j = 0; j < s.Length; j++) {
                     if (s[j].Contains("KTP")) {
+                        string[] ss = s[j].Split(">");
+                        List<string> TempList = new List<string>();
+                        if (!SteamIDDictionary.ContainsKey(ss[0])) {
+                            TempList.Add(ss[1]);
+                            SteamIDDictionary.Add(ss[0], TempList);
+                        }
+                        else {
+                            TempList = SteamIDDictionary[ss[0]];
+                            TempList.Add(ss[1]);
+                            SteamIDDictionary[ss[0]] = TempList;
+                        }
                         LogLines.Add(s[j]);
                         Console.Write("\rLogline " + count + "added.");
                         count++;
@@ -180,11 +193,21 @@ namespace DoDCvarCheckerFTP {
                 }
                 Console.WriteLine("Finished parsing string " + i + " out of " + LogFilesNew2.Count);
             }
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyyMMddHHmmssfff") + ".txt", true)) {
-                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyyMMddHHmmssfff") + " from " + LogFiles.Count + " logs across 7 servers.\r\n");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
+                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + " from " + LogFiles.Count + " logfile lines across 10 servers.\r\n");
                 foreach (string s in LogLines) {
                     file.WriteLine(s);
                 }
+                file.WriteLine("----------------------------------------------------------------------------------------\r\n");
+                file.WriteLine("----------------------------------------------------------------------------------------\r\n");
+                file.WriteLine("By STEAMID Attempt. \r\n");
+                for (int i = 0; i < SteamIDDictionary.Count; i++) {
+                    file.WriteLine(SteamIDDictionary.Keys.ElementAt(i));
+                    file.WriteLine("\t" + SteamIDDictionary.Values.ElementAt(i));
+                    file.WriteLine("");
+                }
+
+                
             }
         }
 
