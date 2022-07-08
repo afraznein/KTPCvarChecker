@@ -16,11 +16,12 @@ namespace DoDCvarCheckerFTP {
         public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
         public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
         public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
+        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.08.22 Nein_";
         static void Main(string[] args) {
 
 
             while (true){
-                Console.WriteLine("KTP Cvar Checker FTP. Version 07.05.22 Nein_");
+                Console.WriteLine(Version);
                 Console.WriteLine("1. Get status of all of the files, last modified date.");
                 Console.WriteLine("2. FTP Update for CVAR Checker");
                 Console.WriteLine("3. Pull logs");
@@ -203,6 +204,7 @@ namespace DoDCvarCheckerFTP {
                 Console.WriteLine("Finished parsing string " + i + " out of " + LogFilesNew2.Count);
             }
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
+                file.WriteLine(Version);
                 file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across 10 servers. Grouped by STEAMID. \r\n");
                 /*foreach (string s in LogLines) {
                     file.WriteLine(s);
@@ -232,13 +234,19 @@ namespace DoDCvarCheckerFTP {
                         }
                     }
                     file.WriteLine("\t" + ADDRESSES);
-
+                    int num = 0;
+                    string violationsStr = "\r\n\t\t";
                     for (int j = 0; j < SteamIDDictionary.Values.ElementAt(i).Count; j++) {
                         string str = SteamIDDictionary.Values.ElementAt(i).ToList()[j].ToString();
-                        int num = NumViolations[str];
+                        num += NumViolations[str];
                         string[] ss = str.Split(" changed ");
-                        file.WriteLine("\t" + ss[1] + "# of Violations: " + num);
+                        if (!violationsStr.Contains(ss[1])) {
+                            violationsStr += ss[1] + "\r\n\t\t";
+                        }
+                        //file.WriteLine("\t" + ss[1] + "# of Violations: " + num);
                     }
+                    file.WriteLine("\t# of Violations: " + num);
+                    file.WriteLine("\t--CVAR VIOLATIONS--" + violationsStr);
                     file.WriteLine("");
                 }    
             }
