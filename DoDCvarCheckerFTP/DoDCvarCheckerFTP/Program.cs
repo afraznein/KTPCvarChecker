@@ -13,7 +13,9 @@ namespace DoDCvarCheckerFTP {
         public static HashSet<string> LogFilesNew = new HashSet<string>();
         public static HashSet<string> LogFilesNew2 = new HashSet<string>();
         public static HashSet<string> LogLines = new HashSet<string>();
-        public static Dictionary<string, List<string>> SteamIDDictionary = new Dictionary<string, List<string>>();
+        public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
+        public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
+        public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
         static void Main(string[] args) {
 
 
@@ -147,7 +149,7 @@ namespace DoDCvarCheckerFTP {
 
         public static void ProcessLogs() {
             Console.WriteLine("Processing Logs.");
-            LogFiles = LogFiles.Select(s => s.Replace("L ", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("L  - ", "")).ToList();
             LogFiles = LogFiles.Select(s => s.Replace("<0.000000>", "")).ToList();
             LogFiles = LogFiles.Select(s => s.Replace(" [ktp_cvar.amxx] ", "")).ToList();
             LogFiles = LogFiles.Select(s => s.Replace("--------", "")).ToList();
@@ -176,15 +178,22 @@ namespace DoDCvarCheckerFTP {
                 for (int j = 0; j < s.Length; j++) {
                     if (s[j].Contains("KTP")) {
                         string[] ss = s[j].Split(">");
-                        List<string> TempList = new List<string>();
+                        HashSet<string> TempHash = new HashSet<string>();
                         if (!SteamIDDictionary.ContainsKey(ss[0])) {
-                            TempList.Add(ss[1]);
-                            SteamIDDictionary.Add(ss[0], TempList);
+                            TempHash.Add(ss[1]);
+                            SteamIDDictionary.Add(ss[0], TempHash);
                         }
                         else {
-                            TempList = SteamIDDictionary[ss[0]];
-                            TempList.Add(ss[1]);
-                            SteamIDDictionary[ss[0]] = TempList;
+                            TempHash = SteamIDDictionary[ss[0]];
+                            TempHash.Add(ss[1]);
+                            SteamIDDictionary[ss[0]] = TempHash;
+                        }
+                        if (!NumViolations.ContainsKey(ss[1])) {
+                            NumViolations.Add(ss[1], 1);
+                        }
+                        else {
+                            int temp = NumViolations[ss[1]];
+                            NumViolations[ss[1]] = ++temp;
                         }
                         LogLines.Add(s[j]);
                         Console.Write("\rLogline " + count + "added.");
@@ -194,20 +203,44 @@ namespace DoDCvarCheckerFTP {
                 Console.WriteLine("Finished parsing string " + i + " out of " + LogFilesNew2.Count);
             }
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
-                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + " from " + LogFiles.Count + " logfile lines across 10 servers.\r\n");
-                foreach (string s in LogLines) {
+                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across 10 servers. Grouped by STEAMID. \r\n");
+                /*foreach (string s in LogLines) {
                     file.WriteLine(s);
                 }
                 file.WriteLine("----------------------------------------------------------------------------------------\r\n");
                 file.WriteLine("----------------------------------------------------------------------------------------\r\n");
                 file.WriteLine("By STEAMID Attempt. \r\n");
+                */
                 for (int i = 0; i < SteamIDDictionary.Count; i++) {
-                    file.WriteLine(SteamIDDictionary.Keys.ElementAt(i));
-                    file.WriteLine("\t" + SteamIDDictionary.Values.ElementAt(i));
-                    file.WriteLine("");
-                }
+                    file.WriteLine(SteamIDDictionary.Keys.ElementAt(i) + ">");
+                    string ALIASES = "ALIASES: ";
+                    string ADDRESSES = "IP ADDRESSES: ";
+                    for (int j = 0; j < SteamIDDictionary.Values.ElementAt(i).Count; j++) {
+                        string str = SteamIDDictionary.Values.ElementAt(i).ToList()[j].ToString();
+                        string[] ss = str.Split(" ip:");
+                        if (!ALIASES.Contains(ss[0])) {
+                            ALIASES += ss[0] + "; ";
+                        }
+                    }
+                    file.WriteLine("\t" + ALIASES);
+                    for (int j = 0; j < SteamIDDictionary.Values.ElementAt(i).Count; j++) {
+                        string str = SteamIDDictionary.Values.ElementAt(i).ToList()[j].ToString();
+                        string[] ss = str.Split(" changed ");
+                        string[] sss = ss[0].Split("ip:");
+                        if (!ADDRESSES.Contains(sss[1])) {
+                            ADDRESSES += sss[1] + ";  ";
+                        }
+                    }
+                    file.WriteLine("\t" + ADDRESSES);
 
-                
+                    for (int j = 0; j < SteamIDDictionary.Values.ElementAt(i).Count; j++) {
+                        string str = SteamIDDictionary.Values.ElementAt(i).ToList()[j].ToString();
+                        int num = NumViolations[str];
+                        string[] ss = str.Split(" changed ");
+                        file.WriteLine("\t" + ss[1] + "# of Violations: " + num);
+                    }
+                    file.WriteLine("");
+                }    
             }
         }
 
