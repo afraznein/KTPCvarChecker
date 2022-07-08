@@ -1,9 +1,11 @@
 list1.txt
 list2.txt
+FullLog*.txt
 ServerKeysLocal.cs
 [B]bin
 [O]obj
 bin
 obj
+logs
 .vs
 PublishProfiles
