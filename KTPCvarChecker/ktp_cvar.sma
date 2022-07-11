@@ -2,8 +2,10 @@
 *   Title:    KTP Cvar Settings (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.0
-*   Release Date:      2022-06-17
+*   Current Version:   3.1
+*   Release Date:      2022-07-10
+*
+*					   3.0 2022-06-17
 *
 */
 
@@ -43,8 +45,8 @@
 #include <amxmisc>
 
 
-new const gs_PLUGIN[]	= "KTP Cvar Settings"
-new const gs_VERSION[]	= "3.0"
+new const gs_PLUGIN[]	= "KTP Cvar Checker"
+new const gs_VERSION[]	= "3.1"
 new const gs_AUTHOR[]	= "Nein_"
 
 
@@ -110,8 +112,8 @@ new gs_mainmsg4[90]
 new gs_mainmsg5[90]
 
 
-//Cvar list curated from original CAL list and list used by Bud and Markoz
-new gs_cvars[63][] =
+//Cvar list. Originally curated from original CAL list, and brazillian list used by Bud and Markoz; Massive modifications made for KTP purposes
+new gs_cvars[62][] =
 {
 	"ambient_fade",
 	"ambient_level",
@@ -148,7 +150,6 @@ new gs_cvars[63][] =
 	"r_traceglow",
 	"r_wadtextures",
 	"texgamma",
-	"developer",
 	"r_luminance",
 	"s_show",
 	"cl_showevents",
@@ -169,17 +170,17 @@ new gs_cvars[63][] =
 	"cl_yawspeed",
 	"cl_movespeedkey",
 	"cl_pmanstats",
-	"lightgamma",	//56
-	"cl_smoothtime",//57
-	"cl_bob",       //58
-	"cl_updaterate",//59
-	"cl_cmdrate",   //60
-	"rate",         //61
-	"ex_interp"     //62
+	"lightgamma",	//55
+	"cl_smoothtime",//56
+	"cl_bob",       //57
+	"cl_updaterate",//58
+	"cl_cmdrate",   //59
+	"rate",         //60
+	"ex_interp"     //61
 }
 
 //Equal or Min Values
-new gs_calvalues[63][] =
+new gs_calvalues[62][] =
 {
 	"100",
 	"0.3",
@@ -219,7 +220,6 @@ new gs_calvalues[63][] =
 	"0",
 	"0",
 	"0",
-	"0",
 	"0.67",
 	"210",
 	"225",
@@ -253,13 +253,13 @@ new gs_altvalues[7][] =
 	"0.100000", //smoothtime
 	"0.011000", //bob
 	"120.000000", //updaterate
-	"450.000000", //cmdrate
+	"500.000000", //cmdrate
 	"1000000.000000", //rate
 	"0.040000" //interp
 }
 
 
-new gi_cvarnumID[86]
+new gi_cvarnumID[62]
 new gi_cvarnum
 
 
@@ -308,10 +308,10 @@ public fn_msginitial ( id )
 	//client_print (gi_playerID, print_console, "%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
 	
 	get_user_name(id, gs_logname, 31);
-	//client_print (id, print_chat, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
-	//client_print (id, print_console, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
-	//client_print (id, print_chat, "Initializing KTP Cvar Checker for user %s.", gs_logname);
-	//client_print (id, print_console, "Initializing KTP Cvar Checker for user %s.", gs_logname);
+	client_print (id, print_chat, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
+	client_print (id, print_console, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
+	client_print (id, print_chat, "Initializing KTP Cvar Checker for user %s.", gs_logname);
+	client_print (id, print_console, "Initializing KTP Cvar Checker for user %s.", gs_logname);
 }
 
 public client_putinserver ( id )
@@ -338,24 +338,22 @@ public client_disconnect ( id )
 
 public fn_loopquerries ( id )
 {
-	gi_cvarnumID[id] = -1
-	get_user_name(id, gs_logname, 31);
-	//client_print(0, print_chat, "Temporary Debug Line: Cvar Checker Started for %s", gs_logname);
+	gi_cvarnumID[id] = 0
 	set_task ( 0.14, "fn_query", id, "", 0, "a", 71 )
 	
 }
 
 public fn_query ( id )
 {
+	if ( gi_cvarnumID[id] < 62 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
 	gi_cvarnumID[id]++
-	if ( gi_cvarnumID[id] < 63 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
 }
 
 public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
 {
 	gf_valuefromplayer = floatstr ( s_VALUE )
 	
-	for ( gi_cvarnum = 0; gi_cvarnum < 56; gi_cvarnum++ )
+	for ( gi_cvarnum = 0; gi_cvarnum < 55; gi_cvarnum++ )
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
@@ -364,7 +362,7 @@ public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
 		}
 	}
 		
-	for ( gi_cvarnum = 56; gi_cvarnum < 63; gi_cvarnum++ )	
+	for ( gi_cvarnum = 55; gi_cvarnum < 62; gi_cvarnum++ )	
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
@@ -373,7 +371,7 @@ public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
 			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue )
 		}
 	}
-	if ( equal ( s_CVARNAME, gs_cvars[62] ) ) 
+	if ( equal ( s_CVARNAME, gs_cvars[61] ) ) 
 	{
 		fn_checkfirstcomplete ( id );
 	}
@@ -403,20 +401,21 @@ public fn_checkvalues ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float
 	get_user_name(id, gs_logname, 31);
 	if ( ! ( gf_valuefromplayer == gf_calfloatvalue ) )
 	{
-		//client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
-		//client_print(0, print_console, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_console, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
 		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
 	}
 }
 
 public fn_checkaltallowed ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue, Float: gf_altfloatvalue )
 {
+	get_user_name(id, gs_logname, 31);
 	//if ( ( gf_valuefromplayer <= gf_calfloatvalue ) || ( gf_valuefromplayer >= gf_altfloatvalue ) )
 	if ( ((floatcmp(gf_valuefromplayer,gf_calfloatvalue) == -1) && (floatcmp(gf_valuefromplayer,gf_calfloatvalue) != 0)) 
 	|| ((floatcmp(gf_valuefromplayer,gf_altfloatvalue) == 1) && (floatcmp(gf_valuefromplayer,gf_altfloatvalue) != 0)) )
 	{
-		//client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Values %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, String: gf_altfloatvalue);
-		//client_print(0, print_console, "%s for player %s. Client value: %f Authorized Values %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, String: gf_altfloatvalue);
+		client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Values %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue);
+		client_print(0, print_console, "%s for player %s. Client value: %f Authorized Values %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue);
 		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
 	}
 }
@@ -425,14 +424,14 @@ public fn_fcoslogshow ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float
 {
 	if ( ! gb_StopChecking[id] == true )
 	{
-		//client_cmd ( id, "%s %f", s_CVARNAME, gf_calfloatvalue )
+		client_cmd ( id, "%s %f", s_CVARNAME, gf_calfloatvalue )
 
 		get_user_name ( id, gs_logname, 31 )
 		get_user_authid ( id, gs_logauthid, 32 )
 		get_user_ip ( id, gs_logip, 43 )
 		
-		//client_print(0, print_chat, "Attempted to overrwite %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
-		//client_print(0, print_console, "Attempted to overrwite %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_chat, "Attempted to update %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_console, "Attempted to update %s for user %s from %f to %f", gs_logname, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue);
 		
 		log_amx ( "%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
 		
@@ -446,7 +445,7 @@ public fn_fcoslogshow ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float
 			
 			if ( get_pcvar_num ( gp_fcos_warn ) && gi_numofattempts[id] == get_pcvar_num ( gp_fcos_attempt_num_warn ) || get_pcvar_num ( gp_fcos_warn ) && gi_numofattempts[id] > get_pcvar_num ( gp_fcos_attempt_num_warn ) && get_pcvar_num ( gp_fcos_repeat_warning ) )
 			{
-				//fn_formatandshowmotd ( id, s_CVARNAME, gf_calfloatvalue, gf_valuefromplayer )
+				fn_formatandshowmotd ( id, s_CVARNAME, gf_calfloatvalue, gf_valuefromplayer )
 			}
 			
 			if ( get_pcvar_num ( gp_fcos_change_name ) && gi_numofattempts[id] == get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
