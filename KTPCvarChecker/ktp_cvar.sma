@@ -2,8 +2,8 @@
 *   Title:    KTP Cvar Settings (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.1
-*   Release Date:      2022-07-10
+*   Current Version:   3.338
+*   Release Date:      2022-07-21
 *
 *					   3.0 2022-06-17
 *
@@ -46,16 +46,16 @@
 
 
 new const gs_PLUGIN[]	= "KTP Cvar Checker"
-new const gs_VERSION[]	= "3.1"
+new const gs_VERSION[]	= "3.338"
 new const gs_AUTHOR[]	= "Nein_"
 
 
 new const gs_FILENAME[]	= "ktp_cvar"
 new const gs_FILETYPE[]	= ".cfg"
 
+new const gs_pitch[]	= "m_pitch"
 
-new gp_fcos_repeat_check
-new gp_fcos_show_admin_forced_msg
+
 new gp_fcos_warn
 new gp_fcos_attempt_num_warn
 new gp_fcos_repeat_warning
@@ -77,6 +77,7 @@ new bool: gb_StopChecking[33]
 new Float: gf_valuefromplayer
 new Float: gf_calfloatvalue
 new Float: gf_altfloatvalue
+new Float: gf_randnum
 
 
 new gs_directory[33]
@@ -85,8 +86,6 @@ new gs_fcosconfigfile[55]
 
 new gi_players[32]
 new gi_playercnt
-new gi_playernum 
-new gi_playerID
 
 
 new gs_logname[32]
@@ -263,13 +262,12 @@ new gi_cvarnumID[62]
 new gi_cvarnum
 
 
+
 public plugin_init ()
 {
 	register_plugin ( gs_PLUGIN, gs_VERSION, gs_AUTHOR )
 	register_cvar ( "ktp_cvar_version", gs_VERSION, FCVAR_SERVER|FCVAR_SPONLY )
 	
-	gp_fcos_repeat_check		= register_cvar ( "fcos_repeat_check", "1" )
-	gp_fcos_show_admin_forced_msg	= register_cvar ( "fcos_show_admin_forced_msg", "1" )
 	gp_fcos_warn			= register_cvar ( "fcos_warn", "1" )
 	gp_fcos_attempt_num_warn	= register_cvar ( "fcos_attempt_num_warn", "1" )
 	gp_fcos_repeat_warning		= register_cvar ( "fcos_repeat_warning", "1" )
@@ -282,7 +280,6 @@ public plugin_init ()
 	gp_fcos_attempt_num_kickorban	= register_cvar ( "fcos_attempt_num_kickorban", "0" )
 	gp_fcos_ban_time		= register_cvar ( "fcos_ban_time", "0" )
 	gp_fcos_use_amx_bans		= register_cvar ( "fcos_use_amx_bans", "0" )
-	//gi_playercnt = 0
 	
 	register_dictionary ( "ktp_cvar.txt" )
 	
@@ -302,11 +299,6 @@ public fn_servermessage ()
 
 public fn_msginitial ( id )
 {
-	//client_print (id, print_chat, "%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR )
-	//client_print (id, print_console, "%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR )
-	//client_print (gi_playerID, print_chat, "%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR )
-	//client_print (gi_playerID, print_console, "%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
-	
 	get_user_name(id, gs_logname, 31);
 	client_print (id, print_chat, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
 	client_print (id, print_console, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
@@ -338,13 +330,14 @@ public client_disconnect ( id )
 
 public fn_loopquerries ( id )
 {
-	gi_cvarnumID[id] = 0
-	set_task ( 0.14, "fn_query", id, "", 0, "a", 71 )
-	
+	gi_cvarnumID[id] = 0;
+	//client_print (0, print_chat, "Loop started. %f", gf_randnum);
+	set_task ( 0.25, "fn_query", id, "", 0, "a", 62 )
 }
 
 public fn_query ( id )
 {
+
 	if ( gi_cvarnumID[id] < 62 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
 	gi_cvarnumID[id]++
 }
@@ -367,7 +360,7 @@ public fn_queryresult ( id, const s_CVARNAME[], const s_VALUE[] )
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
 			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarnum] )
-			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarnum-56] )
+			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarnum-55] )
 			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue )
 		}
 	}
@@ -386,14 +379,16 @@ public fn_checkfirstcomplete ( id )
 	}
 	else 
 	{
-		set_task ( 1.0, "fn_loopquerries", id )
+		gf_randnum = random_float(17.0,60.0);
+		set_task ( gf_randnum, "fn_loopquerries", id )
 	}
 }
 
 public fn_restartcycle ( id )
 {
-	gb_FirstCheckComplete[id] = true
-	set_task ( 1.0, "fn_loopquerries", id )
+	gb_FirstCheckComplete[id] = true;
+	gf_randnum = random_float(17.0,60.0);
+	set_task ( gf_randnum, "fn_loopquerries", id )
 }
 
 public fn_checkvalues ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue )
@@ -401,9 +396,12 @@ public fn_checkvalues ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float
 	get_user_name(id, gs_logname, 31);
 	if ( ! ( gf_valuefromplayer == gf_calfloatvalue ) )
 	{
-		client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
-		client_print(0, print_console, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
-		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+		if (!(equal( s_CVARNAME, gs_pitch) && gf_valuefromplayer == -0.022))
+		{
+			client_print(0, print_chat, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+			client_print(0, print_console, "%s for player %s. Client value: %f Authorized Value: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+			fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+		}
 	}
 }
 

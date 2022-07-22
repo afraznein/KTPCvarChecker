@@ -16,7 +16,7 @@ namespace DoDCvarCheckerFTP {
         public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
         public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
         public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
-        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.08.22 Nein_";
+        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.21.22 Nein_";
         static void Main(string[] args) {
 
 
@@ -77,14 +77,20 @@ namespace DoDCvarCheckerFTP {
 
             using (WebClient client = new WebClient()) {
                 client.Credentials = new NetworkCredential(USERNAME, PASSWORD);
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/amxx.cfg", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\amxx.cfg");
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/plugins.ini", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\plugins.ini");
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvar.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvar.txt");
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvarcfg.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvarcfg.txt");
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvar.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvar.amxx");
-                client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvarconfig.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvarconfig.amxx");
+                byte[] responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/amxx.cfg", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\amxx.cfg");
+                Console.WriteLine("\n{0}",System.Text.Encoding.ASCII.GetString(responseArray));
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/plugins.ini", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\plugins.ini");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvar.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvar.txt");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvarcfg.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvarcfg.txt");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvar.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvar.amxx");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvarconfig.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvarconfig.amxx");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
             }
-            Console.WriteLine("FINISHED UPDATING " + HOSTNAME);
+            Console.WriteLine("\nFINISHED UPDATING " + HOSTNAME);
         }
 
         public static void DeleteLocalLogs() {

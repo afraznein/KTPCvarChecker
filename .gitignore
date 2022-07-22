@@ -1,6 +1,7 @@
 list1.txt
 list2.txt
 FullLog*.txt
+*Log_PreReset.txt
 ServerKeysLocal.cs
 [B]bin
 [O]obj
