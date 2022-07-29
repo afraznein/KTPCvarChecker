@@ -16,7 +16,7 @@ namespace DoDCvarCheckerFTP {
         public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
         public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
         public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
-        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.21.22 Nein_";
+        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.29.22 Nein_";
         static void Main(string[] args) {
 
 
@@ -24,7 +24,8 @@ namespace DoDCvarCheckerFTP {
                 Console.WriteLine(Version);
                 Console.WriteLine("1. Get status of all of the files, last modified date.");
                 Console.WriteLine("2. FTP Update for CVAR Checker");
-                Console.WriteLine("3. Pull logs");
+                Console.WriteLine("3. Pull CVAR logs");
+                Console.WriteLine("4. Delete server CVAR logs");
                 string val = Console.ReadLine();
                 int input = Convert.ToInt32(val);
                 if (input == 1) {
@@ -40,6 +41,13 @@ namespace DoDCvarCheckerFTP {
                     DeleteLocalLogs();
                     FTP_DownloadAllServers();
                     ProcessLogs();
+                }
+                if (input == 4) {
+                    //Pull logs and create .txt file
+                    DeleteLocalLogs();
+                    FTP_DownloadAllServers();
+                    ProcessLogs();
+                    FTP_DeleteLogsAllServers();
                 }
             }
         }
@@ -255,6 +263,36 @@ namespace DoDCvarCheckerFTP {
                     file.WriteLine("\t--CVAR VIOLATIONS--" + violationsStr);
                     file.WriteLine("");
                 }    
+            }
+        }
+
+        public static void FTP_DeleteLogsAllServers() {
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
+        }
+
+        public static void FTP_DeleteLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
+            Console.WriteLine("FTP Access to " + HOSTNAME);
+            FtpClient client = new FtpClient(IP, USERNAME, PASSWORD);
+            client.AutoConnect();
+            // download a folder and all its files
+            //client.DownloadDirectory(@"N:\Nein_\KTPCvarChecker\Logs\"+HOSTNAME, @"/dod/addons/amxmodx/logs", FtpFolderSyncMode.Update);
+            List<string> paths = new List<string>();
+            foreach (FtpListItem element in client.GetListing(@"/dod/addons/amxmodx/logs/*.log")) {
+                paths.Add(element.FullName);
+                Console.WriteLine(element.FullName);
+            }
+            foreach (string s in paths) {
+                Console.WriteLine("Deleting: " + s);
+                client.DeleteFile(@"" + s);
             }
         }
 
