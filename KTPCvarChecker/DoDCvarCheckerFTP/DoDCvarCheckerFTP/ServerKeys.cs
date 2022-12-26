@@ -63,5 +63,17 @@ namespace DoDCvarCheckerFTP {
         public static readonly string Thunder_NY_PORT = "";
         public static readonly string Thunder_NY_USERNAME = "";
         public static readonly string Thunder_NY_PASSWORD = "";
+
+        public static readonly string Kanguh_DAL_HOSTNAME = "";
+        public static readonly string Kanguh_DAL_IP = "";
+        public static readonly string Kanguh_DAL_PORT = "";
+        public static readonly string Kanguh_DAL_USERNAME = "";
+        public static readonly string Kanguh_DAL_PASSWORD = "";
+
+        public static readonly string WASHEDUP_NY_HOSTNAME = "";
+        public static readonly string WASHEDUP_NY_IP = "";
+        public static readonly string WASHEDUP_NY_PORT = "";
+        public static readonly string WASHEDUP_NY_USERNAME = "";
+        public static readonly string WASHEDUP_NY_PASSWORD = "";
     }
 }

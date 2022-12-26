@@ -2,8 +2,8 @@
 *   Title:    KTP Cvar Settings (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.5
-*   Release Date:      2022-07-29
+*   Current Version:   3.6
+*   Release Date:      2022-12-26
 *
 					   3.5 2022-07-29
 *					   3.0 2022-06-17
@@ -15,7 +15,7 @@
 
 
 new const gs_PLUGIN[]	= "KTP Cvar Checker"
-new const gs_VERSION[]	= "3.5"
+new const gs_VERSION[]	= "3.6"
 new const gs_AUTHOR[]	= "Nein_"
 
 
@@ -81,7 +81,7 @@ new gs_mainmsg5[90]
 
 
 //Cvar list. Originally curated from original CAL list, and brazillian list used by Bud and Markoz; Massive modifications made for KTP purposes
-new gs_cvars[56][] =
+new gs_cvars[57][] =
 {
 	"ambient_fade",
 	"ambient_level",
@@ -126,23 +126,24 @@ new gs_cvars[56][] =
 	"lookspring",
 	"lookstrafe",
 	"cl_movespeedkey",
-	"m_pitch",		//43
-	"m_side",
-	"cl_pitchdown",
-	"cl_pitchup",
-	"cl_yawspeed",
-	"cl_pitchspeed",
-	"lightgamma",	//49
-	"cl_smoothtime",//50
-	"cl_bob",       //51
-	"cl_updaterate",//52
-	"cl_cmdrate",   //53
-	"rate",         //54
-	"ex_interp"     //55
+	"hud_takesshots",
+	"m_pitch",		//44
+	"m_side",       //45
+	"cl_pitchdown", //46
+	"cl_pitchup",   //47
+	"cl_yawspeed",  //48
+	"cl_pitchspeed",//49
+	"lightgamma",	//50
+	"cl_smoothtime",//51
+	"cl_bob",       //52
+	"cl_updaterate",//53
+	"cl_cmdrate",   //54
+	"rate",         //55
+	"ex_interp"     //56
 }
 
 //Equal or Min Values
-new gs_calvalues[56][] =
+new gs_calvalues[57][] =
 {
 	"100",
 	"0.3",
@@ -187,6 +188,7 @@ new gs_calvalues[56][] =
 	"0",
 	"0",
 	"0.3",
+	"1",
 	"0.022",
 	"0.8",
 	"89",
@@ -214,11 +216,8 @@ new gs_altvalues[7][] =
 	"0.040000" //interp
 }
 
-new gi_cvarnumID[56]
+new gi_cvarnumID[57]
 new gi_cvarnum
-//new gi_cvarnumsmallID[43] // 0 - 42
-//new gi_cvarnumcheatID[13] // 43 - 56
-//new gi_cvarcheatnum
 
 
 
@@ -297,49 +296,15 @@ public fn_loopquery ( id )
 public fn_query ( id )
 {
 
-	if ( gi_cvarnumID[id] < 56 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
+	if ( gi_cvarnumID[id] < 57 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
 	gi_cvarnumID[id]++
 }
-
-
-/*public fn_loopsmall ( id )
-{
-	client_print (id, print_console, "Loop Query Started");
-	gi_cvarnumID[id] = 0;
-	set_task ( 0.15, "fn_query", id, "", 0, "a", 42 )
-}
-
-public fn_querysmall ( id )
-{
-
-	if ( gi_cvarnumID[id] < 56 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_queryresult" )
-	gi_cvarnumID[id]++
-}
-
-public fn_querysm ( id, const s_CVARNAME[], const s_VALUE[] )
-{
-	gf_valuefromplayer = floatstr ( s_VALUE )
-	
-	for ( gi_cvarnum = 0; gi_cvarnum < 43; gi_cvarnum++ )
-	{
-		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
-		{
-			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarnum] )
-			fn_checkvalues ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
-		}
-	}
-		
-	if ( equal ( s_CVARNAME, gs_cvars[42] ) ) 
-	{
-		fn_checkfirstcomplete ( id );
-	}
-}*/
 
 public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[] )
 {
 	gf_valuefromplayer = floatstr ( s_VALUE )
 	
-	for ( gi_cvarnum = 0; gi_cvarnum < 49; gi_cvarnum++ )
+	for ( gi_cvarnum = 0; gi_cvarnum < 50; gi_cvarnum++ )
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
@@ -348,17 +313,17 @@ public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[] )
 		}
 	}
 
-	for ( gi_cvarnum = 49; gi_cvarnum < 56; gi_cvarnum++ )	
+	for ( gi_cvarnum = 50; gi_cvarnum < 57; gi_cvarnum++ )	
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
 			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarnum] )
-			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarnum-49] )
+			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarnum-50] )
 			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue )
 		}
 	}
 		
-	if ( equal ( s_CVARNAME, gs_cvars[55] ) ) 
+	if ( equal ( s_CVARNAME, gs_cvars[56] ) ) 
 	{
 		fn_firstcomplete ( id );
 	}

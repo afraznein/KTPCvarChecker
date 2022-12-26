@@ -16,7 +16,8 @@ namespace DoDCvarCheckerFTP {
         public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
         public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
         public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
-        public static string Version = "KTP Cvar Checker FTPLOG. Version 07.29.22 Nein_";
+        public static int numServers = 12;
+        public static string Version = "KTP Cvar Checker FTPLOG. Version 12.26.22 Nein_";
         static void Main(string[] args) {
 
 
@@ -26,6 +27,7 @@ namespace DoDCvarCheckerFTP {
                 Console.WriteLine("2. FTP Update for CVAR Checker");
                 Console.WriteLine("3. Pull CVAR logs");
                 Console.WriteLine("4. Delete server CVAR logs");
+                Console.WriteLine("5. Pull dod logs");
                 string val = Console.ReadLine();
                 int input = Convert.ToInt32(val);
                 if (input == 1) {
@@ -40,6 +42,7 @@ namespace DoDCvarCheckerFTP {
                     //Pull logs and create .txt file
                     DeleteLocalLogs();
                     FTP_DownloadAllServers();
+                    ProcessDirectory(@"N:\Nein_\KTPCvarChecker\Logs\");
                     ProcessLogs();
                 }
                 if (input == 4) {
@@ -48,6 +51,11 @@ namespace DoDCvarCheckerFTP {
                     FTP_DownloadAllServers();
                     ProcessLogs();
                     FTP_DeleteLogsAllServers();
+                }
+                if (input == 5) {
+                    //Pull dod logs and create .txt file
+                    FTP_DownloadDoDLogsAllServers();
+                    ProcessDoDLogs();
                 }
             }
         }
@@ -78,6 +86,8 @@ namespace DoDCvarCheckerFTP {
             FTP_Update(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, Convert.ToInt32(ServerKeys.MTP_AL_PORT),ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
             FTP_Update(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, Convert.ToInt32(ServerKeys.Thunder_NY_PORT),ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
             FTP_Update(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, Convert.ToInt32(ServerKeys.Thunder_CHI_PORT),ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
+            FTP_Update(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, Convert.ToInt32(ServerKeys.Kanguh_DAL_PORT), ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            FTP_Update(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, Convert.ToInt32(ServerKeys.WASHEDUP_NY_PORT), ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
         }
 
         public static void FTP_Update(string HOSTNAME, string IP, int PORT, string USERNAME, string PASSWORD) {
@@ -127,6 +137,8 @@ namespace DoDCvarCheckerFTP {
             FTP_DownloadLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
             FTP_DownloadLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
             FTP_DownloadLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
+            FTP_DownloadLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            FTP_DownloadLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
         }
 
         public static void FTP_DownloadLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
@@ -143,7 +155,6 @@ namespace DoDCvarCheckerFTP {
             var newHOSTNAME = HOSTNAME.Split(":")[0];
             System.IO.Directory.CreateDirectory(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME);
             client.DownloadFiles(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME, paths);
-            ProcessDirectory(@"N:\Nein_\KTPCvarChecker\Logs\");
         }
 
         public static void ProcessDirectory(string targetDirectory) {
@@ -171,6 +182,60 @@ namespace DoDCvarCheckerFTP {
             LogFiles = LogFiles.Select(s => s.Replace(" Mapchange to ", "")).ToList();
             LogFiles = LogFiles.Select(s => s.Replace(" [DODX] Could not load stats file: ", "")).ToList();
             LogFiles = LogFiles.Select(s => s.Replace(@"dod\addons\amxmodx\data\dodstats.dat", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_anzio", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_harrington", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_lennon_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_lennon_test", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_chemille", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_thunder2_b1c", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_thunder2_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_armory_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_railroad2_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_solitude_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_lennon2_b1", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_halle", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_saints", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_saints_b1", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_donner", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_railroad", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_aleutian", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_avalanche", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_emmanuel", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_kalt", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_lennon_b3", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_merderet", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_northbound", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_muhle_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_lindbergh_b1", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_cal_sherman2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_forest", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_glider", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_jagd", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_kraftstoff", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_merderet", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_vicenza", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_zalec", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_zafod", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_caen", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_charlie", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_flash", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_orange", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_pandemic_aim", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_tensions", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("DoD_Solitude_b2", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_railyard_test", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("dod_rr2_test", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("<<< Drudge >>>", "Drudge")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("<<< Drudge >>", "Drudge")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("SLeePeRS <> ", "SLeePeRS <>")).ToList();
+
+
+
+            string sssssssss = "";
+            foreach (string s in LogFiles) {
+                sssssssss += s;
+            }
+
 
             Console.WriteLine("Finished generic line replacement.");
             string pattern = "";
@@ -184,15 +249,20 @@ namespace DoDCvarCheckerFTP {
                 LogFilesNew2.Add(Regex.Replace(s, pattern, ""));
             }
             Console.WriteLine("Finished REGEX 00/00/00 replacement.");
-            LogFilesNew2 = LogFilesNew2.Select(s => s.Replace(" -  ", "")).ToHashSet();
+            LogFilesNew2 = LogFilesNew2.Select(s => s.Replace("L  -", "")).ToHashSet();
+            LogFilesNew2 = LogFilesNew2.Select(s => s.Replace("L -", "")).ToHashSet();
             LogFilesNew2 = LogFilesNew2.Select(s => s.Replace("[AMXX] ", "")).ToHashSet();
+            LogFilesNew2 = LogFilesNew2.Select(s => s.Replace("> ip:", " ip:")).ToHashSet();
             int count = 0;
-            for (int i = 0; i<LogFilesNew2.Count; i++) {
+            for (int i = 0; i < LogFilesNew2.Count; i++) {
                 string str = LogFilesNew2.ToList()[i];
                 string[] s = str.Split("\r\n");
                 for (int j = 0; j < s.Length; j++) {
-                    if (s[j].Contains("KTP")) {
-                        string[] ss = s[j].Split(">");
+                    if (s[j].Contains("KTP value")) {
+                        //if (s[j].Contains("Drudge")) {
+                        //    string sssssssssssss = "";
+                        //}
+                        string[] ss = s[j].Split("> ");
                         HashSet<string> TempHash = new HashSet<string>();
                         if (!SteamIDDictionary.ContainsKey(ss[0])) {
                             TempHash.Add(ss[1]);
@@ -200,7 +270,9 @@ namespace DoDCvarCheckerFTP {
                         }
                         else {
                             TempHash = SteamIDDictionary[ss[0]];
-                            TempHash.Add(ss[1]);
+                            if (ss[1].Contains("KTP value")){
+                                TempHash.Add(ss[1]);
+                            }
                             SteamIDDictionary[ss[0]] = TempHash;
                         }
                         if (!NumViolations.ContainsKey(ss[1])) {
@@ -219,7 +291,7 @@ namespace DoDCvarCheckerFTP {
             }
             using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
                 file.WriteLine(Version);
-                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across 10 servers. Grouped by STEAMID. \r\n");
+                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across " + numServers + " servers. Grouped by STEAMID. \r\n");
                 /*foreach (string s in LogLines) {
                     file.WriteLine(s);
                 }
@@ -277,6 +349,8 @@ namespace DoDCvarCheckerFTP {
             FTP_DeleteLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
             FTP_DeleteLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
             FTP_DeleteLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            FTP_DeleteLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
         }
 
         public static void FTP_DeleteLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
@@ -296,5 +370,75 @@ namespace DoDCvarCheckerFTP {
             }
         }
 
+        public static void FTP_DownloadDoDLogsAllServers() {
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            FTP_DownloadDODLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
+        }
+
+        public static void FTP_DownloadDODLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
+            Console.WriteLine("FTP Access to " + HOSTNAME);
+            FtpClient client = new FtpClient(IP, USERNAME, PASSWORD);
+            client.AutoConnect();
+            // download a folder and all its files
+            List<string> paths = new List<string>();
+            foreach (FtpListItem element in client.GetListing(@"/dod/logs/*.log")) {
+                paths.Add(element.FullName);
+                Console.WriteLine(element.FullName);
+            }
+            var newHOSTNAME = HOSTNAME.Split(":")[0];
+            System.IO.Directory.CreateDirectory(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME);
+            client.DownloadFiles(@"N:\Nein_\KTPCvarChecker\DoDLogs\" + newHOSTNAME, paths);
+            ProcessDirectory(@"N:\Nein_\KTPCvarChecker\DoDLogs\");
+        }
+
+        public static void ProcessDoDLogs() {
+            Console.WriteLine("Processing Logs.");
+            LogFiles = LogFiles.Select(s => s.Replace("L ", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("Log file started (file", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace(" (game ", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace(" (version ", "")).ToList();
+            LogFiles = LogFiles.Select(s => s.Replace("48/1.1.2.6/8308", "")).ToList();
+
+            Console.WriteLine("Finished generic line replacement.");
+            string pattern = "";
+            foreach (string s in LogFiles) {
+                pattern = @"\d+:\d+:\d+:\d*";
+                LogFilesNew.Add(Regex.Replace(s, pattern, ""));
+            }
+            Console.WriteLine("Finished REGEX 00:00:00:00 replacement.");
+            foreach (string s in LogFilesNew) {
+                pattern = @"\d+/\d+/\d+";
+                LogFilesNew2.Add(Regex.Replace(s, pattern, ""));
+            }
+            Console.WriteLine("Finished REGEX 00/00/00 replacement.");
+            //LogFilesNew2 = LogFilesNew2.Select(s => s.Replace(" -  ", "")).ToHashSet();
+            int count = 0;
+            for (int i = 0; i < LogFilesNew2.Count; i++) {
+                string str = LogFilesNew2.ToList()[i];
+                string[] s = str.Split("\r\n");
+                for (int j = 0; j < s.Length; j++) {
+                        LogLines.Add(s[j]);
+                        Console.Write("\rLogline " + count + "added.");
+                        count++;
+                }
+            }
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullDoDLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
+                file.WriteLine(Version);
+                file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across 12 servers.\r\n");
+                foreach (string s in LogLines) {
+                    file.WriteLine(s);
+                }
+            }
+        }
     }
 }
