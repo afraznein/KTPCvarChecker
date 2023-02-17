@@ -1,0 +1,14 @@
+[en]
+FCOS_LANG_INFO_STARTUP = %s version %s, 2022 KTP by %s. 
+FCOS_LANG_SERVER_MSG1 = KTP CVAR plugin initiated.
+FCOS_LANG_SERVER_MSG2 = KTP CVAR config executed.
+FCOS_LANG_LOG_ENTRY = <%s> %s ip:%s changed "%s" from value "%f" to KTP value "%f".
+FCOS_LANG_SHOW_ADMIN = "%s" changed "%s" from value "%f" to KTP value "%f".
+FCOS_LANG_REASON = You changed %s from %f to %f which is an illegal value.
+FCOS_LANG_MOTD_TITLE = KTP CVAR CHECKER.
+FCOS_LANG_MOTD_SUBTITLE = ATTENTION! SOME OF YOUR CVAR SETTINGS ARE NOT KTP COMPLIANT.
+FCOS_LANG_MOTD_MAINMSG1 = This server enforces KTP required settings for all players.<br>
+FCOS_LANG_MOTD_MAINMSG2 = You changed %s from %f to %f which is an illegal value or outside of the allowed ranged.<br>
+FCOS_LANG_MOTD_MAINMSG3 = Changing your settings mid-game to non KTP values is against the KTP rulebook.
+FCOS_LANG_MOTD_MAINMSG4 = This message will pop up rendering your game unplayable until you correct the value.<br>
+FCOS_LANG_MOTD_MAINMSG5 = If you continue to attempt to change your settings, further action may be taken.

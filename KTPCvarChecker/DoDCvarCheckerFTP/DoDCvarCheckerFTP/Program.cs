@@ -16,18 +16,21 @@ namespace DoDCvarCheckerFTP {
         public static Dictionary<string, int> CvarErrors = new Dictionary<string, int>();
         public static Dictionary<string, HashSet<string>> SteamIDDictionary = new Dictionary<string, HashSet<string>>();
         public static Dictionary<string, int> NumViolations = new Dictionary<string, int>();
-        public static int numServers = 12;
-        public static string Version = "KTP Cvar Checker FTPLOG. Version 12.26.22 Nein_";
+        public static int numServers = 0;
+        public static bool ignoreRates = false;
+        public static string Version = "KTP Cvar Checker FTPLOG. Version 01.21.23 Nein_";
         static void Main(string[] args) {
 
-
+            // ..\..\..\ for debug
+            // ..\..\..\..\ for publish
             while (true){
                 Console.WriteLine(Version);
                 Console.WriteLine("1. Get status of all of the files, last modified date.");
                 Console.WriteLine("2. FTP Update for CVAR Checker");
                 Console.WriteLine("3. Pull CVAR logs");
-                Console.WriteLine("4. Delete server CVAR logs");
-                Console.WriteLine("5. Pull dod logs");
+                Console.WriteLine("4. Pull CVAR logs (ignore rates)");
+                Console.WriteLine("5. Delete server CVAR logs");
+                Console.WriteLine("6. Pull dod logs");
                 string val = Console.ReadLine();
                 int input = Convert.ToInt32(val);
                 if (input == 1) {
@@ -36,23 +39,32 @@ namespace DoDCvarCheckerFTP {
                 }
                 if (input == 2) {
                     //Push FTP update for all 10 servers
-                    FTP_AllServers();
+                    //FTP_AllServers();
                 }
                 if (input == 3) {
                     //Pull logs and create .txt file
                     DeleteLocalLogs();
                     FTP_DownloadAllServers();
-                    ProcessDirectory(@"N:\Nein_\KTPCvarChecker\Logs\");
+                    ProcessDirectory(@"..\..\..\Logs\");
                     ProcessLogs();
                 }
                 if (input == 4) {
+                    //Pull logs and create .txt file
+                    ignoreRates = true;
+                    DeleteLocalLogs();
+                    FTP_DownloadAllServers();
+                    ProcessDirectory(@"..\..\..\Logs\");
+                    ProcessLogs();
+                    ignoreRates = false;
+                }
+                if (input == 5) {
                     //Pull logs and create .txt file
                     DeleteLocalLogs();
                     FTP_DownloadAllServers();
                     ProcessLogs();
                     FTP_DeleteLogsAllServers();
                 }
-                if (input == 5) {
+                if (input == 6) {
                     //Pull dod logs and create .txt file
                     FTP_DownloadDoDLogsAllServers();
                     ProcessDoDLogs();
@@ -61,12 +73,12 @@ namespace DoDCvarCheckerFTP {
         }
 
         public static void Local_GetAllLocalFiles() {
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\configs\amxx.cfg");
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\configs\plugins.ini");
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvar.txt");
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvarcfg.txt");
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvar.amxx");
-            Local_GetDateTimeModified(@"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvarconfig.amxx");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\configs\amxx.cfg");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\configs\plugins.ini");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\data\lang\ktp_cvar.txt");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\data\lang\ktp_cvarcfg.txt");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\plugins\ktp_cvar.amxx");
+            Local_GetDateTimeModified(@"..\..\..\amxmodx\plugins\ktp_cvarconfig.amxx");
         }
         
         public static void Local_GetDateTimeModified(string path) {
@@ -76,18 +88,37 @@ namespace DoDCvarCheckerFTP {
         }
 
         public static void FTP_AllServers() {
-            FTP_Update(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PORT), ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
-            FTP_Update(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHIOne_PORT),ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
-            FTP_Update(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHIThree_PORT),ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
-            FTP_Update(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_DALOne_PORT),ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            FTP_Update(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, Convert.ToInt32(ServerKeys.NineteenEleven_NYOne_PORT),ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            FTP_Update(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, Convert.ToInt32(ServerKeys.CORYBBJ_PORT),ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            numServers = 0;
+            FTP_Update(ServerKeys.NineteenEleven_NY_2_HOSTNAME, ServerKeys.NineteenEleven_NY_2_IP, Convert.ToInt32(ServerKeys.NineteenEleven_NY_2_PORT), ServerKeys.NineteenEleven_NY_2_USERNAME, ServerKeys.NineteenEleven_NY_2_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.NineteenEleven_CHI_1_HOSTNAME, ServerKeys.NineteenEleven_CHI_1_IP, Convert.ToInt32(ServerKeys.NineteenEleven_CHI_1_PORT),ServerKeys.NineteenEleven_CHI_1_USERNAME, ServerKeys.NineteenEleven_CHI_1_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.NineteenEleven_NY_1_HOSTNAME, ServerKeys.NineteenEleven_NY_1_IP, Convert.ToInt32(ServerKeys.NineteenEleven_NY_1_PORT),ServerKeys.NineteenEleven_NY_1_USERNAME, ServerKeys.NineteenEleven_NY_1_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.NineteenEleven_DAL_1_HOSTNAME, ServerKeys.NineteenEleven_DAL_1_IP, Convert.ToInt32(ServerKeys.NineteenEleven_DAL_1_PORT),ServerKeys.NineteenEleven_DAL_1_USERNAME, ServerKeys.NineteenEleven_DAL_1_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.SHAKYTABLE_DAL_HOSTNAME, ServerKeys.SHAKYTABLE_DAL_IP, Convert.ToInt32(ServerKeys.SHAKYTABLE_DAL_PORT),ServerKeys.SHAKYTABLE_DAL_USERNAME, ServerKeys.SHAKYTABLE_DAL_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.NOGO_CHI_HOSTNAME, ServerKeys.NOGO_CHI_IP, Convert.ToInt32(ServerKeys.NOGO_CHI_PORT),ServerKeys.NOGO_CHI_USERNAME, ServerKeys.NOGO_CHI_PASSWORD);
+            numServers++;
             FTP_Update(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, Convert.ToInt32(ServerKeys.MTP_NY_PORT),ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            FTP_Update(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, Convert.ToInt32(ServerKeys.MTP_AL_PORT),ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.MTP_CHI_HOSTNAME, ServerKeys.MTP_CHI_IP, Convert.ToInt32(ServerKeys.MTP_CHI_PORT),ServerKeys.MTP_CHI_USERNAME, ServerKeys.MTP_CHI_PASSWORD);
+            numServers++;
             FTP_Update(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, Convert.ToInt32(ServerKeys.Thunder_NY_PORT),ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            numServers++;
             FTP_Update(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, Convert.ToInt32(ServerKeys.Thunder_CHI_PORT),ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
-            FTP_Update(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, Convert.ToInt32(ServerKeys.Kanguh_DAL_PORT), ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.ICYHOT_KANGUH_ATL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_ATL_IP, Convert.ToInt32(ServerKeys.ICYHOT_KANGUH_ATL_PORT), ServerKeys.ICYHOT_KANGUH_ATL_USERNAME, ServerKeys.ICYHOT_KANGUH_ATL_PASSWORD);
+            numServers++;
             FTP_Update(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, Convert.ToInt32(ServerKeys.WASHEDUP_NY_PORT), ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.ALLEN_SEA_HOSTNAME, ServerKeys.ALLEN_SEA_IP, Convert.ToInt32(ServerKeys.ALLEN_SEA_PORT), ServerKeys.ALLEN_SEA_USERNAME, ServerKeys.ALLEN_SEA_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.NEINKTP_DAL_HOSTNAME, ServerKeys.NEINKTP_DAL_IP, Convert.ToInt32(ServerKeys.NEINKTP_DAL_PORT), ServerKeys.NEINKTP_DAL_USERNAME, ServerKeys.NEINKTP_DAL_PASSWORD);
+            numServers++;
+            FTP_Update(ServerKeys.ICYHOT_KANGUH_DAL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_DAL_IP, Convert.ToInt32(ServerKeys.ICYHOT_KANGUH_DAL_PORT), ServerKeys.ICYHOT_KANGUH_DAL_USERNAME, ServerKeys.ICYHOT_KANGUH_DAL_PASSWORD);
+            numServers++;
         }
 
         public static void FTP_Update(string HOSTNAME, string IP, int PORT, string USERNAME, string PASSWORD) {
@@ -95,24 +126,24 @@ namespace DoDCvarCheckerFTP {
 
             using (WebClient client = new WebClient()) {
                 client.Credentials = new NetworkCredential(USERNAME, PASSWORD);
-                byte[] responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/amxx.cfg", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\amxx.cfg");
-                Console.WriteLine("\n{0}",System.Text.Encoding.ASCII.GetString(responseArray));
-                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/plugins.ini", @"N:\Nein_\KTPCvarChecker\amxmodx\configs\plugins.ini");
-                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
-                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvar.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvar.txt");
-                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
-                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvarcfg.txt", @"N:\Nein_\KTPCvarChecker\amxmodx\data\lang\ktp_cvarcfg.txt");
-                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
-                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvar.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvar.amxx");
-                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
-                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvarconfig.amxx", @"N:\Nein_\KTPCvarChecker\amxmodx\plugins\ktp_cvarconfig.amxx");
-                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray));
+                byte[] responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/amxx.cfg", @"..\..\..\amxmodx\configs\amxx.cfg");
+                Console.WriteLine("\n{0}",System.Text.Encoding.ASCII.GetString(responseArray)+"/dod/addons/amxmodx/configs/amxx.cfg", @"..\..\..\amxmodx\configs\amxx.cfg");
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/configs/plugins.ini", @"..\..\..\amxmodx\configs\plugins.ini");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray)+"/dod/addons/amxmodx/configs/plugins.ini", @"..\..\..\amxmodx\configs\plugins.ini");
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvar.txt", @"..\..\..\amxmodx\data\lang\ktp_cvar.txt");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray)+ "/dod/addons/amxmodx/data/lang/ktp_cvar.txt", @"..\..\..\amxmodx\data\lang\ktp_cvar.txt");
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/data/lang/ktp_cvarcfg.txt", @"..\..\..\amxmodx\data\lang\ktp_cvarcfg.txt");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray)+ "/dod/addons/amxmodx/data/lang/ktp_cvarcfg.txt", @"..\..\..\amxmodx\data\lang\ktp_cvarcfg.txt");
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvar.amxx", @"..\..\..\amxmodx\plugins\ktp_cvar.amxx");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray)+ "/dod/addons/amxmodx/plugins/ktp_cvar.amxx", @"..\..\..\amxmodx\plugins\ktp_cvar.amxx");
+                responseArray = client.UploadFile("ftp://" + IP + "/dod/addons/amxmodx/plugins/ktp_cvarconfig.amxx", @"..\..\..\amxmodx\plugins\ktp_cvarconfig.amxx");
+                Console.WriteLine("\n{0}", System.Text.Encoding.ASCII.GetString(responseArray)+ "/dod/addons/amxmodx/plugins/ktp_cvarconfig.amxx", @"..\..\..\amxmodx\plugins\ktp_cvarconfig.amxx");
             }
             Console.WriteLine("\nFINISHED UPDATING " + HOSTNAME);
         }
 
         public static void DeleteLocalLogs() {
-            string path = @"N:\Nein_\KTPCvarChecker\Logs\";
+            string path = @"..\..\..\Logs\";
 
             DirectoryInfo directory = new DirectoryInfo(path);
 
@@ -127,18 +158,37 @@ namespace DoDCvarCheckerFTP {
         }
 
         public static void FTP_DownloadAllServers() {
-            FTP_DownloadLogs(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            numServers = 0;
+            FTP_DownloadLogs(ServerKeys.NineteenEleven_NY_2_HOSTNAME, ServerKeys.NineteenEleven_NY_2_IP, ServerKeys.NineteenEleven_NY_2_USERNAME, ServerKeys.NineteenEleven_NY_2_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.NineteenEleven_CHI_1_HOSTNAME, ServerKeys.NineteenEleven_CHI_1_IP, ServerKeys.NineteenEleven_CHI_1_USERNAME, ServerKeys.NineteenEleven_CHI_1_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.NineteenEleven_NY_1_HOSTNAME, ServerKeys.NineteenEleven_NY_1_IP, ServerKeys.NineteenEleven_NY_1_USERNAME, ServerKeys.NineteenEleven_NY_1_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.NineteenEleven_DAL_1_HOSTNAME, ServerKeys.NineteenEleven_DAL_1_IP, ServerKeys.NineteenEleven_DAL_1_USERNAME, ServerKeys.NineteenEleven_DAL_1_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.SHAKYTABLE_DAL_HOSTNAME, ServerKeys.SHAKYTABLE_DAL_IP, ServerKeys.SHAKYTABLE_DAL_USERNAME, ServerKeys.SHAKYTABLE_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.NOGO_CHI_HOSTNAME, ServerKeys.NOGO_CHI_IP, ServerKeys.NOGO_CHI_USERNAME, ServerKeys.NOGO_CHI_PASSWORD);
+            numServers++;
             FTP_DownloadLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.MTP_CHI_HOSTNAME, ServerKeys.MTP_CHI_IP, ServerKeys.MTP_CHI_USERNAME, ServerKeys.MTP_CHI_PASSWORD);
+            numServers++;
             FTP_DownloadLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            numServers++;
             FTP_DownloadLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
-            FTP_DownloadLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.ICYHOT_KANGUH_ATL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_ATL_IP, ServerKeys.ICYHOT_KANGUH_ATL_USERNAME, ServerKeys.ICYHOT_KANGUH_ATL_PASSWORD);
+            numServers++;
             FTP_DownloadLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.ALLEN_SEA_HOSTNAME, ServerKeys.ALLEN_SEA_IP, ServerKeys.ALLEN_SEA_USERNAME, ServerKeys.ALLEN_SEA_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.NEINKTP_DAL_HOSTNAME, ServerKeys.NEINKTP_DAL_IP, ServerKeys.NEINKTP_DAL_USERNAME, ServerKeys.NEINKTP_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadLogs(ServerKeys.ICYHOT_KANGUH_DAL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_DAL_IP, ServerKeys.ICYHOT_KANGUH_DAL_USERNAME, ServerKeys.ICYHOT_KANGUH_DAL_PASSWORD);
+            numServers++;
         }
 
         public static void FTP_DownloadLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
@@ -146,15 +196,15 @@ namespace DoDCvarCheckerFTP {
             FtpClient client = new FtpClient(IP, USERNAME, PASSWORD);
             client.AutoConnect();
             // download a folder and all its files
-            //client.DownloadDirectory(@"N:\Nein_\KTPCvarChecker\Logs\"+HOSTNAME, @"/dod/addons/amxmodx/logs", FtpFolderSyncMode.Update);
+            //client.DownloadDirectory(@"..\..\..\Logs\"+HOSTNAME, @"/dod/addons/amxmodx/logs", FtpFolderSyncMode.Update);
             List<string> paths = new List<string>();
             foreach(FtpListItem element in client.GetListing(@"/dod/addons/amxmodx/logs/*.log")) {
                 paths.Add(element.FullName);
                 Console.WriteLine(element.FullName);
             }
             var newHOSTNAME = HOSTNAME.Split(":")[0];
-            System.IO.Directory.CreateDirectory(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME);
-            client.DownloadFiles(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME, paths);
+            System.IO.Directory.CreateDirectory(@"..\..\..\Logs\" + newHOSTNAME);
+            client.DownloadFiles(@"..\..\..\Logs\" + newHOSTNAME, paths);
         }
 
         public static void ProcessDirectory(string targetDirectory) {
@@ -172,7 +222,7 @@ namespace DoDCvarCheckerFTP {
         public static string ProcessFile(string path) {
             return File.ReadAllText(path);
         }
-
+        
         public static void ProcessLogs() {
             Console.WriteLine("Processing Logs.");
             LogFiles = LogFiles.Select(s => s.Replace("L  - ", "")).ToList();
@@ -258,38 +308,64 @@ namespace DoDCvarCheckerFTP {
                 string str = LogFilesNew2.ToList()[i];
                 string[] s = str.Split("\r\n");
                 for (int j = 0; j < s.Length; j++) {
-                    if (s[j].Contains("KTP value")) {
-                        //if (s[j].Contains("Drudge")) {
-                        //    string sssssssssssss = "";
-                        //}
-                        string[] ss = s[j].Split("> ");
-                        HashSet<string> TempHash = new HashSet<string>();
-                        if (!SteamIDDictionary.ContainsKey(ss[0])) {
-                            TempHash.Add(ss[1]);
-                            SteamIDDictionary.Add(ss[0], TempHash);
-                        }
-                        else {
-                            TempHash = SteamIDDictionary[ss[0]];
-                            if (ss[1].Contains("KTP value")){
-                                TempHash.Add(ss[1]);
+                    if (s[j].Contains("KTP value") && !s[j].Contains("hud_takesshots")) {
+                        if (ignoreRates) {
+                            if(!s[j].Contains("rate")){
+                                string[] ss = s[j].Split("> ");
+                                HashSet<string> TempHash = new HashSet<string>();
+                                if (!SteamIDDictionary.ContainsKey(ss[0])) {
+                                    TempHash.Add(ss[1]);
+                                    SteamIDDictionary.Add(ss[0], TempHash);
+                                }
+                                else {
+                                    TempHash = SteamIDDictionary[ss[0]];
+                                    if (ss[1].Contains("KTP value")) {
+                                        TempHash.Add(ss[1]);
+                                    }
+                                    SteamIDDictionary[ss[0]] = TempHash;
+                                }
+                                if (!NumViolations.ContainsKey(ss[1])) {
+                                    NumViolations.Add(ss[1], 1);
+                                }
+                                else {
+                                    int temp = NumViolations[ss[1]];
+                                    NumViolations[ss[1]] = ++temp;
+                                }
+                                LogLines.Add(s[j]);
+                                Console.Write("\rLogline " + count + "added.");
+                                count++;
                             }
-                            SteamIDDictionary[ss[0]] = TempHash;
-                        }
-                        if (!NumViolations.ContainsKey(ss[1])) {
-                            NumViolations.Add(ss[1], 1);
                         }
                         else {
-                            int temp = NumViolations[ss[1]];
-                            NumViolations[ss[1]] = ++temp;
+                            string[] ss = s[j].Split("> ");
+                            HashSet<string> TempHash = new HashSet<string>();
+                            if (!SteamIDDictionary.ContainsKey(ss[0])) {
+                                TempHash.Add(ss[1]);
+                                SteamIDDictionary.Add(ss[0], TempHash);
+                            }
+                            else {
+                                TempHash = SteamIDDictionary[ss[0]];
+                                if (ss[1].Contains("KTP value")) {
+                                    TempHash.Add(ss[1]);
+                                }
+                                SteamIDDictionary[ss[0]] = TempHash;
+                            }
+                            if (!NumViolations.ContainsKey(ss[1])) {
+                                NumViolations.Add(ss[1], 1);
+                            }
+                            else {
+                                int temp = NumViolations[ss[1]];
+                                NumViolations[ss[1]] = ++temp;
+                            }
+                            LogLines.Add(s[j]);
+                            Console.Write("\rLogline " + count + "added.");
+                            count++;
                         }
-                        LogLines.Add(s[j]);
-                        Console.Write("\rLogline " + count + "added.");
-                        count++;
                     }
                 }
                 Console.WriteLine("Finished parsing string " + i + " out of " + LogFilesNew2.Count);
             }
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"..\..\..\FullLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
                 file.WriteLine(Version);
                 file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across " + numServers + " servers. Grouped by STEAMID. \r\n");
                 /*foreach (string s in LogLines) {
@@ -339,18 +415,37 @@ namespace DoDCvarCheckerFTP {
         }
 
         public static void FTP_DeleteLogsAllServers() {
-            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            int numServers = 0;
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_NY_2_HOSTNAME, ServerKeys.NineteenEleven_NY_2_IP, ServerKeys.NineteenEleven_NY_2_USERNAME, ServerKeys.NineteenEleven_NY_2_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_CHI_1_HOSTNAME, ServerKeys.NineteenEleven_CHI_1_IP, ServerKeys.NineteenEleven_CHI_1_USERNAME, ServerKeys.NineteenEleven_CHI_1_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_NY_1_HOSTNAME, ServerKeys.NineteenEleven_NY_1_IP, ServerKeys.NineteenEleven_NY_1_USERNAME, ServerKeys.NineteenEleven_NY_1_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.NineteenEleven_DAL_1_HOSTNAME, ServerKeys.NineteenEleven_DAL_1_IP, ServerKeys.NineteenEleven_DAL_1_USERNAME, ServerKeys.NineteenEleven_DAL_1_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.SHAKYTABLE_DAL_HOSTNAME, ServerKeys.SHAKYTABLE_DAL_IP, ServerKeys.SHAKYTABLE_DAL_USERNAME, ServerKeys.SHAKYTABLE_DAL_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.NOGO_CHI_HOSTNAME, ServerKeys.NOGO_CHI_IP, ServerKeys.NOGO_CHI_USERNAME, ServerKeys.NOGO_CHI_PASSWORD);
+            numServers++;
             FTP_DeleteLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.MTP_CHI_HOSTNAME, ServerKeys.MTP_CHI_IP, ServerKeys.MTP_CHI_USERNAME, ServerKeys.MTP_CHI_PASSWORD);
+            numServers++;
             FTP_DeleteLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            numServers++;
             FTP_DeleteLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
-            FTP_DeleteLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.ICYHOT_KANGUH_ATL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_ATL_IP, ServerKeys.ICYHOT_KANGUH_ATL_USERNAME, ServerKeys.ICYHOT_KANGUH_ATL_PASSWORD);
+            numServers++;
             FTP_DeleteLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.ALLEN_SEA_HOSTNAME, ServerKeys.ALLEN_SEA_IP, ServerKeys.ALLEN_SEA_USERNAME, ServerKeys.ALLEN_SEA_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.NEINKTP_DAL_HOSTNAME, ServerKeys.NEINKTP_DAL_IP, ServerKeys.NEINKTP_DAL_USERNAME, ServerKeys.NEINKTP_DAL_PASSWORD);
+            numServers++;
+            FTP_DeleteLogs(ServerKeys.ICYHOT_KANGUH_DAL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_DAL_IP, ServerKeys.ICYHOT_KANGUH_DAL_USERNAME, ServerKeys.ICYHOT_KANGUH_DAL_PASSWORD);
+            numServers++;
         }
 
         public static void FTP_DeleteLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
@@ -358,7 +453,7 @@ namespace DoDCvarCheckerFTP {
             FtpClient client = new FtpClient(IP, USERNAME, PASSWORD);
             client.AutoConnect();
             // download a folder and all its files
-            //client.DownloadDirectory(@"N:\Nein_\KTPCvarChecker\Logs\"+HOSTNAME, @"/dod/addons/amxmodx/logs", FtpFolderSyncMode.Update);
+            //client.DownloadDirectory(@"..\..\..\Logs\"+HOSTNAME, @"/dod/addons/amxmodx/logs", FtpFolderSyncMode.Update);
             List<string> paths = new List<string>();
             foreach (FtpListItem element in client.GetListing(@"/dod/addons/amxmodx/logs/*.log")) {
                 paths.Add(element.FullName);
@@ -371,18 +466,37 @@ namespace DoDCvarCheckerFTP {
         }
 
         public static void FTP_DownloadDoDLogsAllServers() {
-            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_HOSTNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_IP, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_USERNAME, ServerKeys.NineteenEleven_CHI_TwentyFiveSlot_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHIOne_HOSTNAME, ServerKeys.NineteenEleven_CHIOne_IP, ServerKeys.NineteenEleven_CHIOne_USERNAME, ServerKeys.NineteenEleven_CHIOne_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHIThree_HOSTNAME, ServerKeys.NineteenEleven_CHIThree_IP, ServerKeys.NineteenEleven_CHIThree_USERNAME, ServerKeys.NineteenEleven_CHIThree_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_DALOne_HOSTNAME, ServerKeys.NineteenEleven_DALOne_IP, ServerKeys.NineteenEleven_DALOne_USERNAME, ServerKeys.NineteenEleven_DALOne_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_NYOne_HOSTNAME, ServerKeys.NineteenEleven_NYOne_IP, ServerKeys.NineteenEleven_NYOne_USERNAME, ServerKeys.NineteenEleven_NYOne_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.CORYBBJ_HOSTNAME, ServerKeys.CORYBBJ_IP, ServerKeys.CORYBBJ_USERNAME, ServerKeys.CORYBBJ_PASSWORD);
+            int numServers = 0;
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_NY_2_HOSTNAME, ServerKeys.NineteenEleven_NY_2_IP, ServerKeys.NineteenEleven_NY_2_USERNAME, ServerKeys.NineteenEleven_NY_2_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_CHI_1_HOSTNAME, ServerKeys.NineteenEleven_CHI_1_IP, ServerKeys.NineteenEleven_CHI_1_USERNAME, ServerKeys.NineteenEleven_CHI_1_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_NY_1_HOSTNAME, ServerKeys.NineteenEleven_NY_1_IP, ServerKeys.NineteenEleven_NY_1_USERNAME, ServerKeys.NineteenEleven_NY_1_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.NineteenEleven_DAL_1_HOSTNAME, ServerKeys.NineteenEleven_DAL_1_IP, ServerKeys.NineteenEleven_DAL_1_USERNAME, ServerKeys.NineteenEleven_DAL_1_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.SHAKYTABLE_DAL_HOSTNAME, ServerKeys.SHAKYTABLE_DAL_IP, ServerKeys.SHAKYTABLE_DAL_USERNAME, ServerKeys.SHAKYTABLE_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.NOGO_CHI_HOSTNAME, ServerKeys.NOGO_CHI_IP, ServerKeys.NOGO_CHI_USERNAME, ServerKeys.NOGO_CHI_PASSWORD);
+            numServers++;
             FTP_DownloadDODLogs(ServerKeys.MTP_NY_HOSTNAME, ServerKeys.MTP_NY_IP, ServerKeys.MTP_NY_USERNAME, ServerKeys.MTP_NY_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.MTP_AL_HOSTNAME, ServerKeys.MTP_AL_IP, ServerKeys.MTP_AL_USERNAME, ServerKeys.MTP_AL_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.MTP_CHI_HOSTNAME, ServerKeys.MTP_CHI_IP, ServerKeys.MTP_CHI_USERNAME, ServerKeys.MTP_CHI_PASSWORD);
+            numServers++;
             FTP_DownloadDODLogs(ServerKeys.Thunder_NY_HOSTNAME, ServerKeys.Thunder_NY_IP, ServerKeys.Thunder_NY_USERNAME, ServerKeys.Thunder_NY_PASSWORD);
+            numServers++;
             FTP_DownloadDODLogs(ServerKeys.Thunder_CHI_HOSTNAME, ServerKeys.Thunder_CHI_IP, ServerKeys.Thunder_CHI_USERNAME, ServerKeys.Thunder_CHI_PASSWORD);
-            FTP_DownloadDODLogs(ServerKeys.Kanguh_DAL_HOSTNAME, ServerKeys.Kanguh_DAL_IP, ServerKeys.Kanguh_DAL_USERNAME, ServerKeys.Kanguh_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.ICYHOT_KANGUH_ATL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_ATL_IP, ServerKeys.ICYHOT_KANGUH_ATL_USERNAME, ServerKeys.ICYHOT_KANGUH_ATL_PASSWORD);
+            numServers++;
             FTP_DownloadDODLogs(ServerKeys.WASHEDUP_NY_HOSTNAME, ServerKeys.WASHEDUP_NY_IP, ServerKeys.WASHEDUP_NY_USERNAME, ServerKeys.WASHEDUP_NY_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.ALLEN_SEA_HOSTNAME, ServerKeys.ALLEN_SEA_IP, ServerKeys.ALLEN_SEA_USERNAME, ServerKeys.ALLEN_SEA_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.NEINKTP_DAL_HOSTNAME, ServerKeys.NEINKTP_DAL_IP, ServerKeys.NEINKTP_DAL_USERNAME, ServerKeys.NEINKTP_DAL_PASSWORD);
+            numServers++;
+            FTP_DownloadDODLogs(ServerKeys.ICYHOT_KANGUH_DAL_HOSTNAME, ServerKeys.ICYHOT_KANGUH_DAL_IP, ServerKeys.ICYHOT_KANGUH_DAL_USERNAME, ServerKeys.ICYHOT_KANGUH_DAL_PASSWORD);
+            numServers++;
         }
 
         public static void FTP_DownloadDODLogs(string HOSTNAME, string IP, string USERNAME, string PASSWORD) {
@@ -396,9 +510,9 @@ namespace DoDCvarCheckerFTP {
                 Console.WriteLine(element.FullName);
             }
             var newHOSTNAME = HOSTNAME.Split(":")[0];
-            System.IO.Directory.CreateDirectory(@"N:\Nein_\KTPCvarChecker\Logs\" + newHOSTNAME);
-            client.DownloadFiles(@"N:\Nein_\KTPCvarChecker\DoDLogs\" + newHOSTNAME, paths);
-            ProcessDirectory(@"N:\Nein_\KTPCvarChecker\DoDLogs\");
+            System.IO.Directory.CreateDirectory(@"..\..\..\Logs\" + newHOSTNAME);
+            client.DownloadFiles(@"..\..\DoDLogs\" + newHOSTNAME, paths);
+            ProcessDirectory(@"..\..\DoDLogs\");
         }
 
         public static void ProcessDoDLogs() {
@@ -432,7 +546,7 @@ namespace DoDCvarCheckerFTP {
                         count++;
                 }
             }
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"N:\Nein_\KTPCvarChecker\FullDoDLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"..\..\FullDoDLog" + DateTime.Now.ToString("yyyy_MM_dd_HHmm") + ".txt", true)) {
                 file.WriteLine(Version);
                 file.WriteLine("Compiled on " + DateTime.Now.ToString("yyyy_MM_dd_HH:mm") + " from " + LogFiles.Count + " logfile lines across 12 servers.\r\n");
                 foreach (string s in LogLines) {
