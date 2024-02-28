@@ -1,0 +1,14 @@
+// overview description file for dod_chemille.bsp
+
+global 
+{
+	ZOOM	1.29
+	ORIGIN	-475.44	-557.69	392.00
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_chemille.bmp"
+	HEIGHT	193.00
+}

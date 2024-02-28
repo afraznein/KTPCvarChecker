@@ -1,0 +1,15 @@
+// overview description file for dod_armory_testmap
+// overview and map by nein_
+
+global 
+{
+	ZOOM	1.21
+	ORIGIN	8.0	-90	-425
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_armory_testmap.bmp"
+	HEIGHT	-897.00
+}

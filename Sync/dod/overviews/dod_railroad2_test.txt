@@ -1,0 +1,16 @@
+// overview description file for dod_railroad2_test.bmp
+// Map by Nein_
+// overview by Nein_
+
+global 
+{
+	ZOOM	1.30
+	ORIGIN	-8	2	-83
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_railroad2_test.bmp"
+	HEIGHT	-567
+}

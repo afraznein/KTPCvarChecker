@@ -1,0 +1,17 @@
+// overview made by acetamino for dod_thunder2
+global 
+{
+	ZOOM		1.15
+	ORIGIN		-96.00 143.98		-177
+	ROTATED		0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_thunder2_b2.bmp"
+	HEIGHT	-177
+}
+
+
+
+ //Overview: Zoom 1.15, Map Origin (-96.00, 143.98, 168.00), Z Min 513.00, Z Max -177.00, Rotated 0

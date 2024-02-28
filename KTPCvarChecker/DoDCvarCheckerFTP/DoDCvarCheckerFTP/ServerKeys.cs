@@ -64,11 +64,11 @@ namespace DoDCvarCheckerFTP {
         public static readonly string Thunder_NY_USERNAME = "";
         public static readonly string Thunder_NY_PASSWORD = "";
 
-        public static readonly string ICYHOT_KANGUH_ATL_HOSTNAME = "";
-        public static readonly string ICYHOT_KANGUH_ATL_IP = "";
-        public static readonly string ICYHOT_KANGUH_ATL_PORT = "";
-        public static readonly string ICYHOT_KANGUH_ATL_USERNAME = "";
-        public static readonly string ICYHOT_KANGUH_ATL_PASSWORD = "";
+        public static readonly string ICYHOT_KANGUH_CHI_HOSTNAME = "";
+        public static readonly string ICYHOT_KANGUH_CHI_IP = "";
+        public static readonly string ICYHOT_KANGUH_CHI_PORT = "";
+        public static readonly string ICYHOT_KANGUH_CHI_USERNAME = "";
+        public static readonly string ICYHOT_KANGUH_CHI_PASSWORD = "";
 
         public static readonly string WASHEDUP_NY_HOSTNAME = "";
         public static readonly string WASHEDUP_NY_IP = "";
@@ -93,5 +93,29 @@ namespace DoDCvarCheckerFTP {
         public static readonly string ICYHOT_KANGUH_DAL_PORT = "";
         public static readonly string ICYHOT_KANGUH_DAL_USERNAME = "";
         public static readonly string ICYHOT_KANGUH_DAL_PASSWORD = "";
+
+        public static readonly string OVER_MATA_EURO_HOSTNAME = "";
+        public static readonly string OVER_MATA_EURO_IP = "";
+        public static readonly string OVER_MATA_EURO_PORT = "";
+        public static readonly string OVER_MATA_EURO_USERNAME = "";
+        public static readonly string OVER_MATA_EURO_PASSWORD = "";
+
+        public static readonly string THREE_H_PIFF_ATL_HOSTNAME = "";
+        public static readonly string THREE_H_PIFF_ATL_IP = "";
+        public static readonly string THREE_H_PIFF_ATL_PORT = "";
+        public static readonly string THREE_H_PIFF_ATL_USERNAME = "";
+        public static readonly string THREE_H_PIFF_ATL_PASSWORD = "";
+
+        public static readonly string THREE_H_WARCHYLD_LA_HOSTNAME = "";
+        public static readonly string THREE_H_WARCHYLD_LA_IP = "";
+        public static readonly string THREE_H_WARCHYLD_LA_PORT = "";
+        public static readonly string THREE_H_WARCHYLD_LA_USERNAME = "";
+        public static readonly string THREE_H_WARCHYLD_LA_PASSWORD = "";
+
+        public static readonly string THREESIDEDQUARTER_DAL_HOSTNAME = "";
+        public static readonly string THREESIDEDQUARTER_DAL_IP = "";
+        public static readonly string THREESIDEDQUARTER_DAL_PORT = "";
+        public static readonly string THREESIDEDQUARTER_DAL_USERNAME = "";
+        public static readonly string THREESIDEDQUARTER_DAL_PASSWORD = "";
     }
 }

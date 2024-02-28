@@ -1,0 +1,14 @@
+global {
+ZOOM 1.19
+ORIGIN -0.25 -399.00 -257
+ROTATED 0
+}
+
+layer {
+IMAGE "overviews/dod_halle.bmp"
+HEIGHT -257
+}
+
+
+
+// Zoom 1.19, Map Origin (-0.25, -399.00, 224.00), Z Min 705.00, Z Max -257.00, Rotated 0

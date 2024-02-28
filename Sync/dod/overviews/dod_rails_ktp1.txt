@@ -1,0 +1,15 @@
+// overview description file for dod_rails_ktp1
+// overview and map by nein_
+
+global 
+{
+	ZOOM	1.30
+	ORIGIN	-129.94  176.00  -57.00
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_rails_ktp1.bmp"
+	HEIGHT	-538.00
+}

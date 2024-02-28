@@ -1,0 +1,14 @@
+// overview description file for dod_harrington
+
+global 
+{
+	ZOOM		1.45
+	ORIGIN		20.0	-752.00	-40.00
+	ROTATED		0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_harrington.bmp"
+	HEIGHT	-481.00
+}

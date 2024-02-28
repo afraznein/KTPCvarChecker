@@ -1,0 +1,16 @@
+// overview description file for dod_lennon_test.bmp
+// Map by Lerf; Tox
+// overview by Nein
+
+global 
+{
+	ZOOM	1.14
+	ORIGIN	1.28	409	336.5
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_lennon_test.bmp"
+	HEIGHT	-398
+}

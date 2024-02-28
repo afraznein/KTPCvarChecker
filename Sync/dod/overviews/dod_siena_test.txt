@@ -1,0 +1,12 @@
+// Overview description file for dod_siena_a089
+global
+{
+	ZOOM 1.33
+	ORIGIN 172.00 -16.00 72.00
+	ROTATED 0
+}
+layer
+{
+	IMAGE "overviews/dod_siena_test.bmp"
+	HEIGHT -449.00
+}

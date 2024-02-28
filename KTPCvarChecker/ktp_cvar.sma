@@ -2,10 +2,16 @@
 *   Title:    KTP Cvar Settings (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.6
-*   Release Date:      2022-12-26
+*   Current Version:   4.4
+*   Release Date:      2024-02-27
 *
-					   3.5 2022-07-29
+*					   4.3 2024-02-18
+*					   4.2 2023-09-22
+*					   4.0 2023-03-28
+*					   3.8 2022-03-21
+*					   3.7 2022-03-01
+*					   3.6 2022-12-23
+*					   3.5 2022-07-29
 *					   3.0 2022-06-17
 *
 */
@@ -15,7 +21,7 @@
 
 
 new const gs_PLUGIN[]	= "KTP Cvar Checker"
-new const gs_VERSION[]	= "3.6"
+new const gs_VERSION[]	= "4.4"
 new const gs_AUTHOR[]	= "Nein_"
 
 
@@ -23,7 +29,8 @@ new const gs_FILENAME[]	= "ktp_cvar"
 new const gs_FILETYPE[]	= ".cfg"
 
 new const gs_pitch[]	= "m_pitch"
-
+new const inverse_p[]   = "-0.022"
+new const gs_graph[]    = "net_graph"
 
 new gp_fcos_warn
 new gp_fcos_attempt_num_warn
@@ -38,24 +45,20 @@ new gp_fcos_attempt_num_kickorban
 new gp_fcos_ban_time
 new gp_fcos_use_amx_bans
 
-
 new bool: gb_FirstCheckComplete[33]
 new bool: gb_StopChecking[33]
-
 
 new Float: gf_valuefromplayer
 new Float: gf_calfloatvalue
 new Float: gf_altfloatvalue
 new Float: gf_randnum
-
+new Float: precision = 0.00005
 
 new gs_directory[33]
 new gs_fcosconfigfile[55]
 
-
 new gi_players[32]
 new gi_playercnt
-
 
 new gs_logname[32]
 new gs_logauthid[33]
@@ -65,9 +68,7 @@ new gs_reason[256]
 new gi_userid
 new gi_bantime
 
-
 new gi_numofattempts[33]
-
 
 new gs_motd[1000]
 new gi_len
@@ -79,9 +80,8 @@ new gs_mainmsg3[90]
 new gs_mainmsg4[90]
 new gs_mainmsg5[90]
 
-
 //Cvar list. Originally curated from original CAL list, and brazillian list used by Bud and Markoz; Massive modifications made for KTP purposes
-new gs_cvars[57][] =
+new gs_cvars[58][] =
 {
 	"ambient_fade",
 	"ambient_level",
@@ -105,7 +105,6 @@ new gs_cvars[57][] =
 	"gl_palette_tex",
 	"gl_picmip",
 	"gl_playermip",
-	"gl_round_down",
 	"r_bmodelinterp",
 	"r_drawentities",
 	"r_drawviewmodel",
@@ -126,31 +125,33 @@ new gs_cvars[57][] =
 	"lookspring",
 	"lookstrafe",
 	"cl_movespeedkey",
-	"hud_takesshots",
-	"m_pitch",		//44
-	"m_side",       //45
-	"cl_pitchdown", //46
-	"cl_pitchup",   //47
-	"cl_yawspeed",  //48
-	"cl_pitchspeed",//49
-	"lightgamma",	//50
-	"cl_smoothtime",//51
-	"cl_bob",       //52
-	"cl_updaterate",//53
-	"cl_cmdrate",   //54
-	"rate",         //55
-	"ex_interp"     //56
+	"cl_mousegrab",
+	"m_pitch",
+	"m_side",
+	"cl_pitchdown",
+	"cl_pitchup",
+	"cl_yawspeed",
+	"cl_pitchspeed",
+	"net_graph",
+	"lightgamma",
+	"cl_smoothtime",
+	"cl_bob",
+	"cl_updaterate",
+	"cl_cmdrate",
+	"rate",
+	"ex_interp",
+	"fps_max"
 }
 
 //Equal or Min Values
-new gs_calvalues[57][] =
+new gs_calvalues[58][] =
 {
 	"100",
 	"0.3",
 	"0.8",
 	"0.5",
 	"7.5",
-	"1",
+	"1.0",
 	"0",
 	"0",
 	"0.25",
@@ -167,7 +168,6 @@ new gs_calvalues[57][] =
 	"1",
 	"0",
 	"0",
-	"3",
 	"1",
 	"1",
 	"1",
@@ -195,54 +195,55 @@ new gs_calvalues[57][] =
 	"89",
 	"210",
 	"225",
-	"1.700000", //lightgamma
-	"0.000000", //smoothtime
-	"0.000000", //bob (0.004999?)
-	"100",	//updaterate
-	"100", //cmdrate
-	"100000", //rate
-	"0.000000" //interp
+	"3",
+	"1.7",
+	"0",
+	"0",
+	"100",
+	"100",
+	"100000",
+	"0",
+	"60"
 }
 
 //Max Values
-new gs_altvalues[7][] =
+new gs_altvalues[8][] =
 {
-	"3.000000", //lightgamma
-	"0.100000", //smoothtime
-	"0.011000", //bob
-	"120.000000", //updaterate
-	"500.000000", //cmdrate
-	"1000000.000000", //rate
-	"0.040000" //interp
+	"3", //lightgamma
+	"0.1", //smoothtime
+	"0.011", //bob
+	"120", //updaterate
+	"500", //cmdrate
+	"1000000", //rate
+	"0.04", //interp
+	"500" //fps_max
 }
 
 new gi_cvarnumID[57]
 new gi_cvarnum
-
-
 
 public plugin_init ()
 {
 	register_plugin ( gs_PLUGIN, gs_VERSION, gs_AUTHOR )
 	register_cvar ( "ktp_cvar_version", gs_VERSION, FCVAR_SERVER|FCVAR_SPONLY )
 	
-	gp_fcos_warn			= register_cvar ( "fcos_warn", "1" )
+	gp_fcos_warn				= register_cvar ( "fcos_warn", "1" )
 	gp_fcos_attempt_num_warn	= register_cvar ( "fcos_attempt_num_warn", "5" )
 	gp_fcos_repeat_warning		= register_cvar ( "fcos_repeat_warning", "1" )
-	gp_fcos_change_name		= register_cvar ( "fcos_change_name", "0" )
+	gp_fcos_change_name			= register_cvar ( "fcos_change_name", "0" )
 	gp_fcos_attempt_num_namechange	= register_cvar ( "fcos_attempt_num_namechange", "0" )
-	gp_fcos_slay			= register_cvar ( "fcos_slay", "0" )
+	gp_fcos_slay				= register_cvar ( "fcos_slay", "0" )
 	gp_fcos_attempt_num_slay	= register_cvar ( "fcos_attempt_num_slay", "0" )
 	gp_fcos_repeat_slaying		= register_cvar ( "fcos_repeat_slaying", "0" )
-	gp_fcos_kick_or_ban		= register_cvar ( "fcos_kick_or_ban", "0" )
+	gp_fcos_kick_or_ban			= register_cvar ( "fcos_kick_or_ban", "0" )
 	gp_fcos_attempt_num_kickorban	= register_cvar ( "fcos_attempt_num_kickorban", "0" )
-	gp_fcos_ban_time		= register_cvar ( "fcos_ban_time", "0" )
+	gp_fcos_ban_time			= register_cvar ( "fcos_ban_time", "0" )
 	gp_fcos_use_amx_bans		= register_cvar ( "fcos_use_amx_bans", "0" )
 	
 	register_dictionary ( "ktp_cvar.txt" )
 	
 	get_configsdir ( gs_directory, 32 )
-	formatex ( gs_fcosconfigfile, 54, "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE )
+	formatex ( gs_fcosconfigfile, 57, "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE )
 	if ( file_exists ( gs_fcosconfigfile ) ) server_cmd ( "exec %s", gs_fcosconfigfile )
 	
 	fn_servermessage ()
@@ -258,8 +259,8 @@ public fn_servermessage ()
 public fn_msginitial ( id )
 {
 	get_user_name(id, gs_logname, 31);
-	client_print (id, print_chat, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
-	client_print (id, print_console, "%s version %s, 2022 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
+	client_print (id, print_chat, "%s version %s, 2024 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
+	client_print (id, print_console, "%s version %s, 2024 KTP by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR );
 	client_print (id, print_chat, "Initializing KTP Cvar Checker for %s.", gs_logname);
 	client_print (id, print_console, "Initializing KTP Cvar Checker for %s.", gs_logname);
 }
@@ -273,7 +274,6 @@ public client_putinserver ( id )
 		gi_numofattempts[id] = 0;
 		set_task ( 5.0, "fn_msginitial", id );
 		set_task ( 7.5, "fn_loopquery", id );
-		//set_task ( 10.0, "fn_loopcheater", id );
 	}
 }
 
@@ -290,17 +290,17 @@ public fn_loopquery ( id )
 {
 	//client_print (id, print_console, "Loop Query Started");
 	gi_cvarnumID[id] = 0;
-	set_task ( 0.15, "fn_query", id, "", 0, "a", 56 )
+	set_task ( 0.15, "fn_query", id, "", 0, "a", 58 )
 }
 
 public fn_query ( id )
 {
 
-	if ( gi_cvarnumID[id] < 57 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
+	if ( gi_cvarnumID[id] < 58 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
 	gi_cvarnumID[id]++
 }
 
-public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[] )
+public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[] )
 {
 	gf_valuefromplayer = floatstr ( s_VALUE )
 	
@@ -308,24 +308,25 @@ public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[] )
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
-			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarnum] )
-			fn_checkvalues ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+			gf_calfloatvalue = floatstr (gs_calvalues[gi_cvarnum])
+			fn_checkvalues ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, s_VALUE, s_CALVALUE )
 		}
 	}
 
-	for ( gi_cvarnum = 50; gi_cvarnum < 57; gi_cvarnum++ )	
+	for ( gi_cvarnum = 50; gi_cvarnum < 58; gi_cvarnum++ )	
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
-			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarnum] )
-			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarnum-50] )
-			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue )
+			gf_calfloatvalue =  floatstr(gs_calvalues[gi_cvarnum])
+			gf_altfloatvalue =  floatstr(gs_altvalues[gi_cvarnum-50])
+			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue, s_VALUE, s_CALVALUE )
 		}
 	}
 		
-	if ( equal ( s_CVARNAME, gs_cvars[56] ) ) 
+	if ( equal ( s_CVARNAME, gs_cvars[57] ) ) 
 	{
 		fn_firstcomplete ( id );
+		//client_print (id, print_console, "First Loop marked completed.");
 	}
 }
 
@@ -338,86 +339,79 @@ public fn_firstcomplete ( id )
 	if (gb_FirstCheckComplete[id] == false) 
 	{
 		gb_FirstCheckComplete[id] = true;
+		//set_task ( 0.15, "fn_loopquery", id )
 		set_task ( gf_randnum, "fn_loopquery", id )
 	}
 	else 
 	{
+		//set_task ( 0.15, "fn_loopquery", id )
 		set_task ( gf_randnum, "fn_loopquery", id )
 	}
 }
 
-
-/*public fn_loopcheater ( id )
-{
-	gi_cvarnumcheatID[id] = 43;
-	set_task ( 5.0, "fn_querycheats", id, "", 0, "a", 13)
-}
-
-public fn_querycheats ( id )
-{
-
-	if ( gi_cvarnumcheatID[id] < 56 ) query_client_cvar ( id, gs_cvars[gi_cvarnumcheatID[id]], "fn_querycheatresult" )
-	gi_cvarnumcheatID[id]++
-}
-
-public fn_querycheatresult ( id, const s_CVARNAME[], const s_VALUE[] )
-{
-	gf_valuefromplayer = floatstr ( s_VALUE )
-	
-	for ( gi_cvarcheatnum = 43; gi_cvarcheatnum < 49; gi_cvarcheatnum++ )
-	{
-		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarcheatnum] ) )
-		{
-			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarcheatnum] )
-			fn_checkvalues ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
-		}
-	}
-		
-	for ( gi_cvarcheatnum = 49; gi_cvarcheatnum < 56; gi_cvarcheatnum++ )	
-	{
-		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarcheatnum] ) )
-		{
-			gf_calfloatvalue = floatstr ( gs_calvalues[gi_cvarcheatnum] )
-			gf_altfloatvalue = floatstr ( gs_altvalues[gi_cvarcheatnum-49] )
-			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue )
-		}
-	}
-	gb_FirstCheaterCheckComplete[id] = true;
-	set_task ( 0.25, "fn_loopcheater", id )
-}*/
-
-public fn_checkvalues ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue )
+public fn_checkvalues ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue, const s_VALUE[], const s_CALVALUE[])
 {
 	get_user_name(id, gs_logname, 31);
-	if ( ! ( gf_valuefromplayer == gf_calfloatvalue ) )
+	if (equal (s_CVARNAME, gs_pitch))
 	{
-		if (!(equal( s_CVARNAME, gs_pitch) && gf_valuefromplayer == -0.022))
+		//client_print (id, print_chat, "m_pitch debug detection s: %s f: %f", s_VALUE, gf_valuefromplayer);
+		if (!(equal(s_VALUE, inverse_p) || (equal(s_VALUE, s_CALVALUE)) || (floatabs(gf_valuefromplayer - gf_calfloatvalue) <= precision)|| (floatabs(gf_valuefromplayer + gf_calfloatvalue) <= precision)))//(gf_valuefromplayer == gf_calfloatvalue)))//
 		{
-			client_print(0, print_chat, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
-			client_print(0, print_console, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
-			fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+			client_print(0, print_chat, "%s for %s. Client: %f Authorized: -%f OR %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+			client_print(0, print_console, "%s for %s. Client: %f Authorized: -%f OR %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+			fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, s_CALVALUE )
 		}
 	}
+	else
+	{
+		if (!((equal(s_VALUE, s_CALVALUE)) || (floatabs(gf_valuefromplayer - gf_calfloatvalue) <= precision)))
+		{
+		client_print(0, print_chat, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_console, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, s_CALVALUE )
+		}
+	}
+	/*if( (!( gf_valuefromplayer == gf_calfloatvalue)) )
+	{
+		client_print(0, print_chat, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		client_print(0, print_console, "%s for %s. Client: %f Authorized: %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue);
+		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+	}*/
 }
 
-public fn_checkaltallowed ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue, Float: gf_altfloatvalue )
+public fn_checkaltallowed ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue, Float: gf_altfloatvalue,const s_VALUE[], const s_CALVALUE[] )
 {
 	get_user_name(id, gs_logname, 31);
-	//if ( ( gf_valuefromplayer <= gf_calfloatvalue ) || ( gf_valuefromplayer >= gf_altfloatvalue ) )
+
 	if ( ((floatcmp(gf_valuefromplayer,gf_calfloatvalue) == -1) && (floatcmp(gf_valuefromplayer,gf_calfloatvalue) != 0)) 
 	|| ((floatcmp(gf_valuefromplayer,gf_altfloatvalue) == 1) && (floatcmp(gf_valuefromplayer,gf_altfloatvalue) != 0)) )
+	//if (!(floatabs(gf_valuefromplayer - gf_calfloatvalue) <= precision))
 	{
 		client_print(0, print_chat, "%s for %s. Client: %f Authorized: %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue);
 		client_print(0, print_console, "%s for %s. Client: %f Authorized: %f - %f", s_CVARNAME, gs_logname, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue);
-		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue )
+		fn_fcoslogshow ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, s_CALVALUE )
 	}
 }
 
-public fn_fcoslogshow ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue )
+public fn_fcoslogshow ( id, const s_CVARNAME[], Float: gf_valuefromplayer, Float: gf_calfloatvalue, const s_CALVALUE[] )
 {
 	if ( ! gb_StopChecking[id] == true )
 	{
-		client_cmd ( id, "%s %f", s_CVARNAME, gf_calfloatvalue )
+
+		//client_cmd ( id, "%s %f", s_CVARNAME, gf_calfloatvalue )
+		if (equal(s_CVARNAME, gs_pitch) && (gf_valuefromplayer < 0))
+		{
+			client_cmd ( id, "%s %f", s_CVARNAME, -0.022 )
+		}
+		else if (equal(s_CVARNAME, gs_pitch) && (gf_valuefromplayer >= 0))
+		{
+			client_cmd ( id, "%s %f", s_CVARNAME, 0.022 )
+		}
+		else 
+		{
+			client_cmd ( id, "%s %f", s_CVARNAME, gf_calfloatvalue )
+		}
+		
 
 		get_user_name ( id, gs_logname, 31 )
 		get_user_authid ( id, gs_logauthid, 32 )
