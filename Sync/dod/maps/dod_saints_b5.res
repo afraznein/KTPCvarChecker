@@ -3,7 +3,7 @@
 // with serveral improvements and additions by Zero3Cool.
 // For more info go to http://resgen.hltools.com
 
-// .res entries (62):
+// .res entries (60):
 gfx/env/dmcwbk.tga
 gfx/env/dmcwdn.tga
 gfx/env/dmcwft.tga
@@ -46,8 +46,6 @@ models/mapmodels/wood_barrel1.mdl
 models/w_aflag.mdl
 models/w_gflag.mdl
 models/w_wflag.mdl
-overviews/dod_saints_b5.bmp
-overviews/dod_saints_b5.txt
 sound/ambience/alliescap.wav
 sound/ambience/axiscap.wav
 sound/ambience/bell.wav

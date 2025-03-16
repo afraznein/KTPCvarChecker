@@ -1,0 +1,208 @@
+KTP Cvar Checker FTPLOG. Version 08.14.24 Nein_
+Compiled on 2024_09_06_13:37 from 1863 logfile lines across 17 servers. Grouped by STEAMID. 
+
+ <STEAM_0:1:1478672>
+	ALIASES: caff`[dr!nk]; 
+	IP ADDRESSES: 108.215.31.184:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"cl_upspeed" from value "400.000000" to KTP value "320.000000".
+		
+
+ <STEAM_0:1:567600150>
+	ALIASES: M O U Z  SP/BR; :::m::o::u::z:::; MOUZbolinha; mouz; capir1nh4; caip1rinh4; caip1rinh5 maracuja; petalpusher; capirinha; make Em Rage Quit; ca1pirinha; caip1rinha; Caip1rinh4; 
+	IP ADDRESSES: 200.7.115.181:27005;  
+	# of Violations: 90
+	--CVAR VIOLATIONS--
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"fps_max" from value "49.500000" to KTP value "60.000000".
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		"fps_max" from value "50.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:449609222>
+	ALIASES: incite is late; 
+	IP ADDRESSES: 207.98.176.39:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "0.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:773012>
+	ALIASES: s i k; wNk^^; 
+	IP ADDRESSES: 71.239.125.113:27005;  
+	# of Violations: 14
+	--CVAR VIOLATIONS--
+		"ambient_fade" from value "50.000000" to KTP value "100.000000".
+		"ambient_level" from value "0.000000" to KTP value "0.300000".
+		"cl_bobcycle" from value "0.079999" to KTP value "0.800000".
+		"cl_pitchspeed" from value "0.000000" to KTP value "225.000000".
+		
+
+ <STEAM_0:0:56561899>
+	ALIASES: Elizabet.-; 
+	IP ADDRESSES: 181.116.253.4:57406;  
+	# of Violations: 54
+	--CVAR VIOLATIONS--
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		"cl_mousegrab" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:41987420>
+	ALIASES: Arg.Style / PoChoLiNo; 
+	IP ADDRESSES: 181.164.163.209:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"cl_bobcycle" from value "0.000000" to KTP value "0.800000".
+		
+
+ <STEAM_0:1:38165251>
+	ALIASES: bazoo; 
+	IP ADDRESSES: 81.172.18.8:27005;  
+	# of Violations: 12
+	--CVAR VIOLATIONS--
+		"cl_movespeedkey" from value "0.519999" to KTP value "0.300000".
+		"cl_mousegrab" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:117213655>
+	ALIASES: lou!s; 
+	IP ADDRESSES: 89.242.168.42:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:506271>
+	ALIASES: Kenshi Fitmore Dixon; Dixby Deepindere; 
+	IP ADDRESSES: 100.1.231.90:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"fps_max" from value "999.000000" to KTP value "60.000000".
+		"r_drawviewmodel" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:10437288>
+	ALIASES: SirSnipeys; 
+	IP ADDRESSES: 70.110.193.151:27005;  
+	# of Violations: 352
+	--CVAR VIOLATIONS--
+		"gl_alphamin" from value "0.000000" to KTP value "0.250000".
+		"gl_cull" from value "0.000000" to KTP value "1.000000".
+		"gl_dither" from value "0.000000" to KTP value "1.000000".
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"gl_palette_tex" from value "0.000000" to KTP value "1.000000".
+		"r_dynamic" from value "0.000000" to KTP value "1.000000".
+		"r_lightmap" from value "-1.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:16662591>
+	ALIASES: CaNNiBaL; 
+	IP ADDRESSES: 50.24.190.227:27005;  
+	# of Violations: 28
+	--CVAR VIOLATIONS--
+		"gl_alphamin" from value "0.000000" to KTP value "0.250000".
+		"gl_cull" from value "0.000000" to KTP value "1.000000".
+		"gl_dither" from value "0.000000" to KTP value "1.000000".
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"gl_palette_tex" from value "0.000000" to KTP value "1.000000".
+		"r_dynamic" from value "0.000000" to KTP value "1.000000".
+		"r_lightmap" from value "-1.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:49838985>
+	ALIASES: Anne DickleDoo; gaulif von lichendeez; 
+	IP ADDRESSES: 199.224.82.203:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"cl_bob" from value "0.029999" to KTP value "0.000000".
+		"gl_picmip" from value "2.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:143259>
+	ALIASES: nn cK defrag; ck #2, vertex #1; 
+	IP ADDRESSES: 172.118.216.46:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:2221518>
+	ALIASES: hypno_i__; 
+	IP ADDRESSES: 69.207.6.143:27005;  
+	# of Violations: 12
+	--CVAR VIOLATIONS--
+		"cl_pitchspeed" from value "0.000000" to KTP value "225.000000".
+		
+
+ <STEAM_0:1:25292511>
+	ALIASES: nein_; 
+	IP ADDRESSES: 135.84.8.28:3035;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:9712394>
+	ALIASES: ruiN; 
+	IP ADDRESSES: 86.196.233.219:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"fps_max" from value "1000.000000" to KTP value "60.000000".
+		"fps_max" from value "10000.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:451331567>
+	ALIASES: [cK] Chabaited; 
+	IP ADDRESSES: 97.189.55.164:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"cl_bobcycle" from value "0.000000" to KTP value "0.800000".
+		
+
+ <STEAM_0:0:503251>
+	ALIASES: scubadrew; 
+	IP ADDRESSES: 24.6.87.214:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ambient_level" from value "0.000000" to KTP value "0.300000".
+		
+
+ <STEAM_0:1:16869989>
+	ALIASES: Lucho; 
+	IP ADDRESSES: 199.102.79.90:55025;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "0.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:26361712>
+	ALIASES: lerf; 
+	IP ADDRESSES: 38.34.67.171:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "999.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:94331088>
+	ALIASES: Meronca-; 
+	IP ADDRESSES: 67.171.170.143:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "59.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:55458033>
+	ALIASES: handi; 
+	IP ADDRESSES: 172.114.27.19:27005;  
+	# of Violations: 10
+	--CVAR VIOLATIONS--
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		"gl_picmip" from value "1.000000" to KTP value "0.000000".
+		"cl_lc" from value "0.000000" to KTP value "1.000000".
+		
+

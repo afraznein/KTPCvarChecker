@@ -1,0 +1,16 @@
+// overview description file for dod_railyard_b4.bmp
+// Map by Steve Hisey, Toxinator
+// overview by Nein_
+
+global 
+{
+	ZOOM	1.30
+	ORIGIN	-4.00 4.00 272.00
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_railyard_b5.bmp"
+	HEIGHT	-561.00
+}

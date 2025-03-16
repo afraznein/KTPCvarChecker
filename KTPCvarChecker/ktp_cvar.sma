@@ -2,9 +2,10 @@
 *   Title:    KTP Cvar Settings (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   4.4
+*   Current Version:   4.5
 *   Release Date:      2024-02-27
 *
+*					   4.4 2024-02-27
 *					   4.3 2024-02-18
 *					   4.2 2023-09-22
 *					   4.0 2023-03-28
@@ -21,7 +22,7 @@
 
 
 new const gs_PLUGIN[]	= "KTP Cvar Checker"
-new const gs_VERSION[]	= "4.4"
+new const gs_VERSION[]	= "4.5"
 new const gs_AUTHOR[]	= "Nein_"
 
 
@@ -49,6 +50,7 @@ new bool: gb_FirstCheckComplete[33]
 new bool: gb_StopChecking[33]
 
 new Float: gf_valuefromplayer
+new Float: gf_netvaluefromplayer
 new Float: gf_calfloatvalue
 new Float: gf_altfloatvalue
 new Float: gf_randnum
@@ -81,7 +83,7 @@ new gs_mainmsg4[90]
 new gs_mainmsg5[90]
 
 //Cvar list. Originally curated from original CAL list, and brazillian list used by Bud and Markoz; Massive modifications made for KTP purposes
-new gs_cvars[58][] =
+new gs_cvars[57][] =
 {
 	"ambient_fade",
 	"ambient_level",
@@ -125,14 +127,13 @@ new gs_cvars[58][] =
 	"lookspring",
 	"lookstrafe",
 	"cl_movespeedkey",
-	"cl_mousegrab",
 	"m_pitch",
 	"m_side",
 	"cl_pitchdown",
 	"cl_pitchup",
 	"cl_yawspeed",
 	"cl_pitchspeed",
-	"net_graph",
+	"cl_mousegrab",
 	"lightgamma",
 	"cl_smoothtime",
 	"cl_bob",
@@ -144,66 +145,65 @@ new gs_cvars[58][] =
 }
 
 //Equal or Min Values
-new gs_calvalues[58][] =
+new gs_calvalues[57][] =
 {
-	"100",
-	"0.3",
-	"0.8",
-	"0.5",
-	"7.5",
-	"1.0",
-	"0",
-	"0",
-	"0.25",
-	"0",
-	"1",
-	"0",
-	"1",
-	"1",
-	"1",
-	"0",
-	"0",
-	"0",
-	"0",
-	"1",
-	"0",
-	"0",
-	"1",
-	"1",
-	"1",
-	"1",
-	"0",
-	"2.2",
-	"0",
-	"0",
-	"0",
-	"2",
-	"0",
-	"0",
-	"0",
-	"0.67",
-	"1",
-	"1",
-	"320",
-	"0",
-	"0",
-	"0.3",
-	"1",
-	"0.022",
-	"0.8",
-	"89",
-	"89",
-	"210",
-	"225",
-	"3",
-	"1.7",
-	"0",
-	"0",
-	"100",
-	"100",
-	"100000",
-	"0",
-	"60"
+	"100", //ambient_fade
+	"0.3", //ambient_level
+	"0.8", //cl_bobcycle
+	"0.5", //cl_bobup
+	"7.5", //cl_fixtimerate
+	"1", //cl_gaitestimation
+	"0", //fastsprites
+	"0", //gl_affinemodels
+	"0.25", //gl_alphamin
+	"0", //gl_clear
+	"1", //gl_cull
+	"0", //gl_d3dflip
+	"1", //gl_dither
+	"1", //gl_keeptjunctions
+	"1", //gl_lightholes
+	"0", //gl_monolights
+	"0", //gl_nobind
+	"0", //gl_nocolors
+	"0", //gl_overbright
+	"1", //gl_palette_tex
+	"0", //gl_picmip
+	"0", //gl_playermip
+	"1", //r_bmodelinterp
+	"1", //r_drawentities
+	"1", //r_drawviewmodel
+	"1", //r_dynamic
+	"0", //r_fullbright
+	"2.2", //r_glowshellfreq
+	"0", //r_lightmap
+	"0", //r_traceglow
+	"0", //r_wadtextures
+	"2", //texgamma
+	"0", //r_luminance
+	"0", //s_show
+	"0", //cl_showevents
+	"0.67", //cl_anglespeedkey
+	"1", //cl_lc
+	"1", //cl_lw
+	"320", //cl_upspeed
+	"0", //lookspring
+	"0", //lookstrafe
+	"0.3", //cl_movespeedkey
+	"0.022", //m_pitch (also allow inverse -0.022)
+	"0.8", //m_side
+	"89", //cl_pitchdown
+	"89", //cl_pitchup
+	"210", //cl_yawspeed
+	"225", //cl_pitchspeed
+	"1", //cl_mousegrab
+	"1.7", // MIN VALUE: lightgamma (Index: 49)
+	"0", // MIN VALUE: cl_smoothtime (Index: 50)
+	"0", // MIN VALUE: cl_bob (Index: 51)
+	"100", // MIN VALUE: cl_updaterate (Index: 52)
+	"100", // MIN VALUE: cl_cmdrate (Index: 53)
+	"100000", // MIN VALUE: rate (Index: 54)
+	"0", // MIN VALUE: ex_interp (Index: 55)
+	"60" // MIN VALUE: fps_max (Index: 56)
 }
 
 //Max Values
@@ -217,6 +217,14 @@ new gs_altvalues[8][] =
 	"1000000", //rate
 	"0.04", //interp
 	"500" //fps_max
+}
+
+//Net_Graph
+new gs_netgraph[3][] =
+{
+	"1", 
+	"2", 
+	"3"
 }
 
 new gi_cvarnumID[57]
@@ -274,6 +282,7 @@ public client_putinserver ( id )
 		gi_numofattempts[id] = 0;
 		set_task ( 5.0, "fn_msginitial", id );
 		set_task ( 7.5, "fn_loopquery", id );
+		//set_task ( 30, "fn_netgraph", id );
 	}
 }
 
@@ -295,8 +304,7 @@ public fn_loopquery ( id )
 
 public fn_query ( id )
 {
-
-	if ( gi_cvarnumID[id] < 58 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
+	if ( gi_cvarnumID[id] < 57 ) query_client_cvar ( id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar" )
 	gi_cvarnumID[id]++
 }
 
@@ -304,7 +312,7 @@ public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[
 {
 	gf_valuefromplayer = floatstr ( s_VALUE )
 	
-	for ( gi_cvarnum = 0; gi_cvarnum < 50; gi_cvarnum++ )
+	for ( gi_cvarnum = 0; gi_cvarnum < 49; gi_cvarnum++ )
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
@@ -313,17 +321,17 @@ public fn_querycvar ( id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[
 		}
 	}
 
-	for ( gi_cvarnum = 50; gi_cvarnum < 58; gi_cvarnum++ )	
+	for ( gi_cvarnum = 49; gi_cvarnum < 57; gi_cvarnum++ )	
 	{
 		if ( equal ( s_CVARNAME, gs_cvars[gi_cvarnum] ) )
 		{
 			gf_calfloatvalue =  floatstr(gs_calvalues[gi_cvarnum])
-			gf_altfloatvalue =  floatstr(gs_altvalues[gi_cvarnum-50])
+			gf_altfloatvalue =  floatstr(gs_altvalues[gi_cvarnum-49])
 			fn_checkaltallowed ( id, s_CVARNAME, gf_valuefromplayer, gf_calfloatvalue, gf_altfloatvalue, s_VALUE, s_CALVALUE )
 		}
 	}
 		
-	if ( equal ( s_CVARNAME, gs_cvars[57] ) ) 
+	if ( equal ( s_CVARNAME, gs_cvars[56] ) ) 
 	{
 		fn_firstcomplete ( id );
 		//client_print (id, print_console, "First Loop marked completed.");

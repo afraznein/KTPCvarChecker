@@ -1,0 +1,3 @@
+KTP Cvar Checker FTPLOG. Version 08.14.24 Nein_
+Compiled on 2024_09_06_13:44 from 0 logfile lines across 17 servers. Grouped by STEAMID. 
+

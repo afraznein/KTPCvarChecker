@@ -1,0 +1,1008 @@
+KTP Cvar Checker FTPLOG. Version 08.14.24 Nein_
+Compiled on 2024_09_06_13:25 from 1863 logfile lines across 17 servers. Grouped by STEAMID. 
+
+ <STEAM_0:1:3518076>
+	ALIASES: carpenter puts on a #clinic; nn cK Carp; 
+	IP ADDRESSES: 136.38.136.7:27005;  
+	# of Violations: 49
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:773012>
+	ALIASES: wNk^^; s i k; [cK] wNk^^; 
+	IP ADDRESSES: 71.239.125.113:27005;  
+	# of Violations: 12
+	--CVAR VIOLATIONS--
+		"cl_cmdrate" from value "90.000000" to KTP value "100.000000".
+		"ambient_fade" from value "50.000000" to KTP value "100.000000".
+		"ambient_level" from value "0.000000" to KTP value "0.300000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"cl_bobcycle" from value "0.079999" to KTP value "0.800000".
+		"cl_pitchspeed" from value "0.000000" to KTP value "225.000000".
+		"rate" from value "99999.000000" to KTP value "100000.000000".
+		"rate" from value "1.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:8713221>
+	ALIASES: cuck chi; 
+	IP ADDRESSES: 104.28.159.122:38036;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:2034456>
+	ALIASES: Black Sperm; Thom Browne; Mr.Coffee X Black Sperm; 
+	IP ADDRESSES: 84.17.41.22:48138;  45.77.111.51:36459;  84.17.41.22:45887;  84.17.41.22:34355;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:50622>
+	ALIASES: El Professor[dd]; 
+	IP ADDRESSES: 75.84.4.164:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:1478672>
+	ALIASES: caff`[dr!nk]; 
+	IP ADDRESSES: 108.215.31.184:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"cl_upspeed" from value "400.000000" to KTP value "320.000000".
+		
+
+ <STEAM_0:0:46798294>
+	ALIASES: hybrid; 
+	IP ADDRESSES: 108.24.162.90:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:567600150>
+	ALIASES: M O U Z  SP/BR; caipirinha; :::m::o::u::z:::; MOUZbolinha; mouz; capir1nh4; caip1rinh4; caip1rinh5 maracuja; petalpusher; capirinha; make Em Rage Quit; ca1pirinha; caip1rinha; Caip1rinh4; 
+	IP ADDRESSES: 200.7.115.181:27005;  
+	# of Violations: 54
+	--CVAR VIOLATIONS--
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"rate" from value "9999.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "80.000000" to KTP value "100.000000".
+		"rate" from value "15000.000000" to KTP value "100000.000000".
+		"cl_cmdrate" from value "80.000000" to KTP value "100.000000".
+		"fps_max" from value "49.500000" to KTP value "60.000000".
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		"fps_max" from value "50.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:449609222>
+	ALIASES: incite is late; 
+	IP ADDRESSES: 207.98.176.39:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"fps_max" from value "0.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:10054114>
+	ALIASES: 3SidedQuarter-|T3G|-; duck, duck, quarter; MyMMRislife; QuackQuack| 3SidedQuarter; 
+	IP ADDRESSES: 47.216.89.242:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:769711>
+	ALIASES: THUNDER  ilovealiceglass; 
+	IP ADDRESSES: 24.34.98.10:35529;  71.255.112.95:40317;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:31011030>
+	ALIASES: acetamino; 
+	IP ADDRESSES: 73.119.16.41:27005;  
+	# of Violations: 21
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:19099348>
+	ALIASES: c l a n X  _b76; clan X _so; clan X sooooooo!; soyahhhhhhhhh; 【x】  SO31; clanX _$[o; clanX soyaHhL1ciOusSs-.!; [ X ] so; c l a n X  so31; clan X so31; clan X Julianno Soyah; clan X 898soyahmafia; X! so31; 
+	IP ADDRESSES: 186.104.180.105:27005;  186.104.144.174:27005;  186.104.184.249:27005;  186.104.173.221:27005;  186.104.178.199:27005;  186.104.147.203:27005;  186.104.183.106:27005;  186.104.161.198:27005;  186.104.199.30:27005;  186.104.201.154:27005;  186.104.169.16:27005;  186.104.160.35:27005;  186.104.133.169:27005;  186.104.218.221:27005;  
+	# of Violations: 24
+	--CVAR VIOLATIONS--
+		"rate" from value "80000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "45.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "45.000000" to KTP value "100.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"cl_cmdrate" from value "10.000000" to KTP value "100.000000".
+		
+
+ <STEAM_0:0:305737>
+	ALIASES: clanX The.Octoboss; clan X T Pirocoptero T; TKs do RYAN = 0; 
+	IP ADDRESSES: 201.42.13.81:27005;  201.42.16.31:27005;  177.188.230.152:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:11784460>
+	ALIASES: clanX  ogum    /11/; clan X ogum     /11/; clanX  l o b A t o n    [ ^;^ ]; clan X l o b.         /11/; clanX  l o b A t o n.; 
+	IP ADDRESSES: 174.48.88.71:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:33426612>
+	ALIASES: sv420; blueberry; duk1ssj-; 
+	IP ADDRESSES: 181.91.137.57:27005;  181.90.34.61:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "80.000000" to KTP value "100.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:8785712>
+	ALIASES: Shin-Santos/SP; 
+	IP ADDRESSES: 187.21.174.105:29958;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:16512295>
+	ALIASES: Raphinha; clanX Anik; 
+	IP ADDRESSES: 179.210.149.209:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:10824754>
+	ALIASES: carpeta; gual0; 
+	IP ADDRESSES: 190.1.46.194:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:16159065>
+	ALIASES: clan X RPC; clanX  RPC; 
+	IP ADDRESSES: 179.210.149.209:1024;  179.210.149.209:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:2495424>
+	ALIASES: clan X MaT*; clanX MaT*; clanX [<O>] MaT*; MaTzinNN; 
+	IP ADDRESSES: 168.194.167.26:27005;  104.28.152.85:14074;  104.28.152.92:52649;  104.28.159.207:52459;  168.194.167.24:27005;  168.194.167.25:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:4786732>
+	ALIASES: The Godfodder of Silver-B; 
+	IP ADDRESSES: 96.236.223.127:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:56561899>
+	ALIASES: Elizabet.-; 
+	IP ADDRESSES: 181.116.253.4:57406;  
+	# of Violations: 27
+	--CVAR VIOLATIONS--
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		"cl_mousegrab" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:17274249>
+	ALIASES: warms; 
+	IP ADDRESSES: 45.170.198.151:52590;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:9789303>
+	ALIASES: Guerrento; 
+	IP ADDRESSES: 177.200.62.190:19239;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:203045553>
+	ALIASES: ArG.Style | el guacho cicatriz; Shoolta·; 
+	IP ADDRESSES: 190.124.58.31:27005;  190.124.58.29:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "100.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:41987420>
+	ALIASES: PoChoLiNo; Arg.Style / PoChoLiNo; pocholino; 
+	IP ADDRESSES: 181.164.163.209:27005;  181.168.94.14:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_bobcycle" from value "0.000000" to KTP value "0.800000".
+		
+
+ <STEAM_0:1:12700908>
+	ALIASES: bradok; 
+	IP ADDRESSES: 177.104.109.31:33427;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:607914>
+	ALIASES: (1)sirio; 
+	IP ADDRESSES: 190.55.242.242:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:91566145>
+	ALIASES: Empyyyyyyyyyyy~; 
+	IP ADDRESSES: 181.46.138.194:14677;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:5537549>
+	ALIASES: tw | Ryann; Morro da Muriçoca | Stevie doi; Stevie Doidao; 
+	IP ADDRESSES: 179.193.48.139:27005;  179.193.47.235:27005;  179.193.46.149:27005;  201.86.17.76:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:20602730>
+	ALIASES: tw | Manga; sX; Chupa Essa Manga; sX; 
+	IP ADDRESSES: 187.94.118.90:27005;  189.40.64.176:44116;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:10995436>
+	ALIASES: 【ツ】; tw | leto ツ.; 
+	IP ADDRESSES: 200.153.159.175:27005;  179.94.110.232:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:13058096>
+	ALIASES: |CoNTra| Jiraiya; Jiraiyêra; 
+	IP ADDRESSES: 143.255.102.23:23280;  143.255.103.65:36321;  170.0.169.171:63452;  170.0.169.180:34672;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:12636236>
+	ALIASES: !mpact # FOFUCHO; AZ; 
+	IP ADDRESSES: 187.181.2.12:27005;  167.250.69.234:28053;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:38165251>
+	ALIASES: bazoo; 
+	IP ADDRESSES: 81.172.18.8:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"cl_movespeedkey" from value "0.519999" to KTP value "0.300000".
+		"cl_mousegrab" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:708554>
+	ALIASES: Ana; 
+	IP ADDRESSES: 5.81.184.246:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:0:81229153>
+	ALIASES: LightningWar; 
+	IP ADDRESSES: 31.111.61.33:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:16151757>
+	ALIASES: Crouch Commander[chee]; Serpantiner; D-bo; D-bo #Racist; Chancla Weilder; 
+	IP ADDRESSES: 76.174.81.110:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"rate" from value "1.000000" to KTP value "100000.000000".
+		"cl_updaterate" from value "60.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "60.000000" to KTP value "100.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "69.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:41108058>
+	ALIASES: superuva!; Arg.Style | 100 de Mortadela; 
+	IP ADDRESSES: 190.31.136.30:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:16869989>
+	ALIASES: [cK] Lucho; 
+	IP ADDRESSES: 104.129.25.74:45999;  199.102.79.90:55025;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"fps_max" from value "0.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:788066828>
+	ALIASES: |FuBaR|* fusa; 
+	IP ADDRESSES: 179.214.127.15:11472;  179.214.127.15:24939;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:12941104>
+	ALIASES: [Para]medico; 
+	IP ADDRESSES: 143.255.102.125:35962;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:62934>
+	ALIASES: NoGo ! ddro; 
+	IP ADDRESSES: 74.196.210.33:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:11680906>
+	ALIASES: bud; 
+	IP ADDRESSES: 187.2.235.26:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:12623220>
+	ALIASES: scat; scat-; 1gigfiber; 
+	IP ADDRESSES: 74.215.7.77:27005;  172.59.33.159:14709;  74.83.84.170:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"net_graph" from value "2.000000" to KTP value "3.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:193523593>
+	ALIASES: 4Ev@12 Black Hawk; 
+	IP ADDRESSES: 98.50.188.34:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:47198332>
+	ALIASES: bestiaLoNNNNNNNNN;; besTiaLoNNNNNNNNNN;; bing b0ng; besTiaLoN;; maxipapa!!!; 
+	IP ADDRESSES: 186.185.63.51:25848;  186.185.34.34:10794;  186.24.102.183:24199;  186.185.52.152:2800;  186.185.44.207:23530;  186.24.103.228:27628;  186.24.103.228:27344;  186.24.204.136:43593;  186.185.103.139:32216;  186.24.206.83:22677;  186.24.95.115:3106;  
+	# of Violations: 15
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"rate" from value "10000.000000" to KTP value "100000.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:117213655>
+	ALIASES: lou!s; 
+	IP ADDRESSES: 89.242.168.42:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:12362076>
+	ALIASES: Nanakiiiii #IndependenZa.dods; 
+	IP ADDRESSES: 88.170.198.228:10647;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:20614831>
+	ALIASES: -#over. kAFREEE; syndicate.kAFREEE; 
+	IP ADDRESSES: 207.188.181.12:27005;  213.177.210.150:27005;  
+	# of Violations: 10
+	--CVAR VIOLATIONS--
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_cmdrate" from value "10.000000" to KTP value "100.000000".
+		
+
+ <STEAM_0:1:4356382>
+	ALIASES: Anik; 
+	IP ADDRESSES: 213.156.149.86:54654;  213.156.149.86:50095;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:506271>
+	ALIASES: Kenshi Fitmore Dixon; Dixby Deepindere; 
+	IP ADDRESSES: 100.1.231.90:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "999.000000" to KTP value "60.000000".
+		"r_drawviewmodel" from value "0.000000" to KTP value "1.000000".
+		
+
+ <STEAM_0:1:10437288>
+	ALIASES: SirSnipeys; 
+	IP ADDRESSES: 70.110.193.151:27005;  
+	# of Violations: 180
+	--CVAR VIOLATIONS--
+		"gl_alphamin" from value "0.000000" to KTP value "0.250000".
+		"gl_cull" from value "0.000000" to KTP value "1.000000".
+		"gl_dither" from value "0.000000" to KTP value "1.000000".
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"gl_palette_tex" from value "0.000000" to KTP value "1.000000".
+		"r_dynamic" from value "0.000000" to KTP value "1.000000".
+		"r_lightmap" from value "-1.000000" to KTP value "0.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"rate" from value "80000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_cmdrate" from value "999.000000" to KTP value "100.000000".
+		
+
+ <STEAM_0:1:16662591>
+	ALIASES: CaNNiBaL; 
+	IP ADDRESSES: 50.24.190.227:27005;  
+	# of Violations: 14
+	--CVAR VIOLATIONS--
+		"gl_alphamin" from value "0.000000" to KTP value "0.250000".
+		"gl_cull" from value "0.000000" to KTP value "1.000000".
+		"gl_dither" from value "0.000000" to KTP value "1.000000".
+		"gl_keeptjunctions" from value "0.000000" to KTP value "1.000000".
+		"gl_lightholes" from value "0.000000" to KTP value "1.000000".
+		"gl_palette_tex" from value "0.000000" to KTP value "1.000000".
+		"r_dynamic" from value "0.000000" to KTP value "1.000000".
+		"r_lightmap" from value "-1.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:49838985>
+	ALIASES: Anne DickleDoo; gaulif von lichendeez; 
+	IP ADDRESSES: 199.224.82.203:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"cl_bob" from value "0.029999" to KTP value "0.000000".
+		"gl_picmip" from value "2.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:90794>
+	ALIASES: bing bong; 
+	IP ADDRESSES: 69.232.250.237:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:77934219>
+	ALIASES: pb_; 
+	IP ADDRESSES: 74.215.54.166:27005;  163.182.15.65:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"ex_interp" from value "0.050000" to KTP value "0.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:79321>
+	ALIASES: bewton; Pandemic * bewton; b e w t o n; 
+	IP ADDRESSES: 47.224.116.220:27005;  47.224.117.24:27005;  
+	# of Violations: 8
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"net_graph" from value "1.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:0:2996359>
+	ALIASES: KTP - Chicago 1 - HLTV; 
+	IP ADDRESSES: 92.38.177.18:39759;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:8737016>
+	ALIASES: Swave; 
+	IP ADDRESSES: 68.185.67.114:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:3612473>
+	ALIASES: KTP - Chicago 1 - HLTV; 
+	IP ADDRESSES: 99.245.38.188:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:0:143259>
+	ALIASES: nn cK defrag; ck #2, vertex #1; 
+	IP ADDRESSES: 172.118.216.46:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"fps_max" from value "59.500000" to KTP value "60.000000".
+		
+
+ <STEAM_0:0:789427387>
+	ALIASES: Shakey.; 
+	IP ADDRESSES: 75.36.190.149:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "20000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:16016464>
+	ALIASES: bropper; 
+	IP ADDRESSES: 156.57.64.113:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:104450108>
+	ALIASES: -^_KS_^- medrano; gräsklippare .-./ reppoh; 
+	IP ADDRESSES: 99.15.80.107:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:898711853>
+	ALIASES: Airnick15; 
+	IP ADDRESSES: 45.143.82.219:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:19944651>
+	ALIASES: {GSR} Red Dogg; 
+	IP ADDRESSES: 104.137.43.119:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "80.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "80.000000" to KTP value "100.000000".
+		
+
+ <STEAM_0:0:103022502>
+	ALIASES: halfsquat; shoresy; 
+	IP ADDRESSES: 136.239.61.229:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "60.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "60.000000" to KTP value "100.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:225930089>
+	ALIASES: [Me109] Shtinky Pinky; 
+	IP ADDRESSES: 116.251.172.47:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "45.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "55.000000" to KTP value "100.000000".
+		"rate" from value "1000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:29151387>
+	ALIASES: GabeTheTr0LL; b_lott; 
+	IP ADDRESSES: 120.153.33.166:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:11211491>
+	ALIASES: [cK] b_lottery; 
+	IP ADDRESSES: 120.153.33.166:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"rate" from value "5000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:709890116>
+	ALIASES: stemcell; 
+	IP ADDRESSES: 67.42.147.251:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:2221518>
+	ALIASES: hypno_i__; 
+	IP ADDRESSES: 69.207.6.143:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"cl_pitchspeed" from value "0.000000" to KTP value "225.000000".
+		
+
+ <STEAM_0:0:8832199>
+	ALIASES: dicE[: :]Goridda[bc]; 
+	IP ADDRESSES: 23.121.244.26:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:1395824>
+	ALIASES: 1L[bb]; 
+	IP ADDRESSES: 104.5.198.147:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:25292511>
+	ALIASES: nein_; 
+	IP ADDRESSES: 135.84.8.28:3035;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:9712394>
+	ALIASES: ruiN; 
+	IP ADDRESSES: 86.196.233.219:27005;  
+	# of Violations: 7
+	--CVAR VIOLATIONS--
+		"fps_max" from value "1000.000000" to KTP value "60.000000".
+		"fps_max" from value "10000.000000" to KTP value "60.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:9721614>
+	ALIASES: Hedward; 
+	IP ADDRESSES: 98.148.238.126:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:281787>
+	ALIASES: Chris Taylor[dd]; 
+	IP ADDRESSES: 172.116.82.9:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:1:451331567>
+	ALIASES: [cK] Chabaited; 
+	IP ADDRESSES: 97.189.55.164:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"cl_bobcycle" from value "0.000000" to KTP value "0.800000".
+		
+
+ <STEAM_0:0:503251>
+	ALIASES: scubadrew; 
+	IP ADDRESSES: 24.6.87.214:27005;  
+	# of Violations: 6
+	--CVAR VIOLATIONS--
+		"ambient_level" from value "0.000000" to KTP value "0.300000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:55458033>
+	ALIASES: handi; 
+	IP ADDRESSES: 172.114.27.19:27005;  104.28.158.206:18599;  
+	# of Violations: 17
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"gl_overbright" from value "1.000000" to KTP value "0.000000".
+		"gl_picmip" from value "1.000000" to KTP value "0.000000".
+		"cl_lc" from value "0.000000" to KTP value "1.000000".
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		
+
+ <STEAM_0:0:208516>
+	ALIASES: trukE; 
+	IP ADDRESSES: 76.93.152.91:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:531977444>
+	ALIASES: shma1tz.swE; 
+	IP ADDRESSES: 68.231.173.74:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:26361712>
+	ALIASES: lerf; 
+	IP ADDRESSES: 38.34.67.171:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"fps_max" from value "999.000000" to KTP value "60.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"rate" from value "0.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:20567065>
+	ALIASES: tomfoolery puts on a #clinic; 
+	IP ADDRESSES: 198.44.128.62:4067;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:76849>
+	ALIASES: tercet; 
+	IP ADDRESSES: 99.241.141.215:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:94331088>
+	ALIASES: Meronca-; 
+	IP ADDRESSES: 67.171.170.143:27005;  
+	# of Violations: 5
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "90.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "20000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		"fps_max" from value "59.000000" to KTP value "60.000000".
+		
+
+ <STEAM_0:1:14081672>
+	ALIASES: chi; 
+	IP ADDRESSES: 190.30.203.212:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:19641>
+	ALIASES: gräsklippare .-./ KVH; 
+	IP ADDRESSES: 104.56.203.34:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:64565>
+	ALIASES: toetickler; 
+	IP ADDRESSES: 50.113.89.0:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:11692441>
+	ALIASES: monday; 
+	IP ADDRESSES: 76.71.113.210:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:13171468>
+	ALIASES: {GSR} Theblender; 
+	IP ADDRESSES: 24.52.43.91:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:10430777>
+	ALIASES: ventrillocrew - KeN; 
+	IP ADDRESSES: 68.112.235.160:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"rate" from value "50000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:1:893924080>
+	ALIASES: Airnick15; 
+	IP ADDRESSES: 174.21.189.37:27005;  
+	# of Violations: 3
+	--CVAR VIOLATIONS--
+		"net_graph" from value "0.000000" to KTP value "3.000000".
+		"rate" from value "25000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:4492>
+	ALIASES: THUNDER 78 degrees; 
+	IP ADDRESSES: 76.35.193.109:21774;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:19202480>
+	ALIASES: devil^outlaw; 
+	IP ADDRESSES: 50.39.175.63:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:748805>
+	ALIASES: seanality; aim good; 
+	IP ADDRESSES: 76.179.7.103:27005;  
+	# of Violations: 2
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:13538321>
+	ALIASES: ex! skkero; 
+	IP ADDRESSES: 62.45.101.25:47903;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:598217246>
+	ALIASES: whack!; 
+	IP ADDRESSES: 72.132.176.105:27005;  
+	# of Violations: 4
+	--CVAR VIOLATIONS--
+		"cl_updaterate" from value "20.000000" to KTP value "100.000000".
+		"cl_cmdrate" from value "30.000000" to KTP value "100.000000".
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:0:7334691>
+	ALIASES: ex! Master KeneF; 
+	IP ADDRESSES: 81.197.158.42:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:1766773>
+	ALIASES: THUNDER  Rifleman; 
+	IP ADDRESSES: 71.187.5.26:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"rate" from value "30000.000000" to KTP value "100000.000000".
+		
+
+ <STEAM_0:0:42805121>
+	ALIASES: tw | mAnd; 
+	IP ADDRESSES: 143.255.2.177:46385;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+
+ <STEAM_0:1:1547256>
+	ALIASES: dicE[: :]stealthlol; 
+	IP ADDRESSES: 73.187.120.3:27005;  
+	# of Violations: 1
+	--CVAR VIOLATIONS--
+		"ex_interp" from value "0.100000" to KTP value "0.000000".
+		
+

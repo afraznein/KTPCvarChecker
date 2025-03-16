@@ -1,0 +1,13 @@
+// overview description file for dod_saints
+global 
+{
+	ZOOM		1.25
+	ORIGIN		-704.00		196.00		-96.00
+	ROTATED		1
+}
+
+layer 
+{
+	IMAGE	"overviews/dod_saints_b8.bmp"
+	HEIGHT	-609.00
+}
