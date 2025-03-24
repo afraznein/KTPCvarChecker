@@ -319,7 +319,7 @@ public class kicker{
 		  System.out.println(server.rconExec("say KTP_RCON KICKING HLTV"));
 		  server.rconExec("kick" + hltv);
 		  //System.out.println(server.rconExec("status"));
-		  return "Successfully kicked HLTV on " + serverIP;
+		  return "Successfully kicked " + hltv + "  on " + serverIP;
 		}
 		catch(SteamCondenserException ex) {
 		  System.err.println("Could not authenticate with the game server.");
