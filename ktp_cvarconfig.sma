@@ -1,9 +1,13 @@
-/* 
-*   Title:    KTP Cvar Settings (fcos)
+/*
+*   Title:    KTP Cvar Settings Config (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.0
-*   Release Date:      2022-06-17
+*   Current Version:   3.1
+*   Release Date:      2024-10-31
+*
+*   Changelog:
+*   3.1 2025-10-31 - Optimized for AMX 1.10, fixed file writing, fixed double increment bugs
+*   3.0 2022-06-17
 *
 */
 
@@ -45,7 +49,7 @@
 
 
 new const gs_PLUGIN[]	= "KTP Cvar Settings Config"
-new const gs_VERSION[]	= "3.0"
+new const gs_VERSION[]	= "3.1"
 new const gs_AUTHOR[]	= "Nein_"
 
 
@@ -289,9 +293,11 @@ public fn_menuselection ( id, key )
 			
 			case 3:
 			{
+				// Fixed double increment bug
 				gi_warningattemptnum = get_pcvar_num ( gp_fcos_attempt_num_warn )
-				if ( gi_warningattemptnum++ > 35 || gi_warningattemptnum > 35 ) set_pcvar_num ( gp_fcos_attempt_num_warn, 1 )
-				else set_pcvar_num ( gp_fcos_attempt_num_warn, gi_warningattemptnum++ )
+				gi_warningattemptnum++
+				if ( gi_warningattemptnum > 35 ) gi_warningattemptnum = 1
+				set_pcvar_num ( gp_fcos_attempt_num_warn, gi_warningattemptnum )
 			}
 			
 			case 4: set_pcvar_num ( gp_fcos_repeat_warning, get_pcvar_num ( gp_fcos_repeat_warning ) ? 0 : 1 )
@@ -299,9 +305,11 @@ public fn_menuselection ( id, key )
 			
 			case 6:
 			{
+				// Fixed double increment bug
 				gi_namechangeattemptnum = get_pcvar_num ( gp_fcos_attempt_num_namechange )
-				if ( gi_namechangeattemptnum++ > 35 || gi_namechangeattemptnum > 35 ) set_pcvar_num ( gp_fcos_attempt_num_namechange, 1 )
-				else set_pcvar_num ( gp_fcos_attempt_num_namechange, gi_namechangeattemptnum++ )
+				gi_namechangeattemptnum++
+				if ( gi_namechangeattemptnum > 35 ) gi_namechangeattemptnum = 1
+				set_pcvar_num ( gp_fcos_attempt_num_namechange, gi_namechangeattemptnum )
 			}
 			
 			case 7: fn_fcossave ( id )
@@ -332,9 +340,11 @@ public fn_menuselection ( id, key )
 			
 			case 1:
 			{
+				// Fixed double increment bug
 				gi_slayingattemptnum = get_pcvar_num ( gp_fcos_attempt_num_slay )
-				if ( gi_slayingattemptnum++ > 35 || gi_slayingattemptnum > 35 ) set_pcvar_num ( gp_fcos_attempt_num_slay, 1 )
-				else set_pcvar_num ( gp_fcos_attempt_num_slay, gi_slayingattemptnum++ )
+				gi_slayingattemptnum++
+				if ( gi_slayingattemptnum > 35 ) gi_slayingattemptnum = 1
+				set_pcvar_num ( gp_fcos_attempt_num_slay, gi_slayingattemptnum )
 			}
 			
 			case 2: set_pcvar_num ( gp_fcos_repeat_slaying, get_pcvar_num ( gp_fcos_repeat_slaying ) ? 0 : 1 )
@@ -349,9 +359,11 @@ public fn_menuselection ( id, key )
 			
 			case 4:
 			{
+				// Fixed double increment bug
 				gi_kickorbanattemptnum = get_pcvar_num ( gp_fcos_attempt_num_kickorban )
-				if ( gi_kickorbanattemptnum++ > 35 || gi_kickorbanattemptnum > 35 ) set_pcvar_num ( gp_fcos_attempt_num_kickorban, 1 )
-				else set_pcvar_num ( gp_fcos_attempt_num_kickorban, gi_kickorbanattemptnum++ )
+				gi_kickorbanattemptnum++
+				if ( gi_kickorbanattemptnum > 35 ) gi_kickorbanattemptnum = 1
+				set_pcvar_num ( gp_fcos_attempt_num_kickorban, gi_kickorbanattemptnum )
 			}
 			
 			case 5:
@@ -396,41 +408,52 @@ public update_fcosmenu ()
 
 public fn_fcossave ( id )
 {
-	formatex ( gs_fcos_repeat_check, 63, "fcos_repeat_check %i", get_pcvar_num ( gp_fcos_repeat_check ) )
-	formatex ( gs_fcos_show_admin_forced_msg, 63, "fcos_show_admin_forced_msg %i", get_pcvar_num ( gp_fcos_show_admin_forced_msg ) )
-	formatex ( gs_fcos_warn, 63, "fcos_warn %i", get_pcvar_num ( gp_fcos_warn ) )
-	formatex ( gs_fcos_attempt_num_warn, 63, "fcos_attempt_num_warn %i", get_pcvar_num ( gp_fcos_attempt_num_warn ) )
-	formatex ( gs_fcos_repeat_warning, 63, "fcos_repeat_warning %i", get_pcvar_num ( gp_fcos_repeat_warning ) )
-	formatex ( gs_fcos_change_name, 63, "fcos_change_name %i", get_pcvar_num ( gp_fcos_change_name ) )
-	formatex ( gs_fcos_attempt_num_namechange, 63, "fcos_attempt_num_namechange %i", get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
-	formatex ( gs_fcos_slay, 63, "fcos_slay %i", get_pcvar_num ( gp_fcos_slay ) )
-	formatex ( gs_fcos_attempt_num_slay, 63, "fcos_attempt_num_slay %i", get_pcvar_num ( gp_fcos_attempt_num_slay ) )
-	formatex ( gs_fcos_repeat_slaying, 63, "fcos_repeat_slaying %i", get_pcvar_num ( gp_fcos_repeat_slaying ) )
-	formatex ( gs_fcos_kick_or_ban, 63, "fcos_kick_or_ban %i", get_pcvar_num ( gp_fcos_kick_or_ban ) )
-	formatex ( gs_fcos_attempt_num_kickorban, 63, "fcos_attempt_num_kickorban %i", get_pcvar_num ( gp_fcos_attempt_num_kickorban ) )
-	formatex ( gs_fcos_ban_time, 63, "fcos_ban_time %i", get_pcvar_num ( gp_fcos_ban_time ) )
-	formatex ( gs_fcos_use_amx_bans, 63, "fcos_use_amx_bans %i", get_pcvar_num ( gp_fcos_use_amx_bans ) )
-	
-	get_configsdir ( gs_directory, 32 )
-	formatex ( gs_cfgfile, 127, "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE )
-	
-	write_file ( gs_cfgfile, gs_fcos_repeat_check, 7 )
-	write_file ( gs_cfgfile, gs_fcos_show_admin_forced_msg, 12 )
-	write_file ( gs_cfgfile, gs_fcos_warn, 17 )
-	write_file ( gs_cfgfile, gs_fcos_attempt_num_warn, 21 )
-	write_file ( gs_cfgfile, gs_fcos_repeat_warning, 26 )
-	write_file ( gs_cfgfile, gs_fcos_change_name, 31 )
-	write_file ( gs_cfgfile, gs_fcos_attempt_num_namechange, 36 )
-	write_file ( gs_cfgfile, gs_fcos_slay, 41 )
-	write_file ( gs_cfgfile, gs_fcos_attempt_num_slay, 45 )
-	write_file ( gs_cfgfile, gs_fcos_repeat_slaying, 50 )
-	write_file ( gs_cfgfile, gs_fcos_kick_or_ban, 55 )
-	write_file ( gs_cfgfile, gs_fcos_attempt_num_kickorban, 60 )
-	write_file ( gs_cfgfile, gs_fcos_ban_time, 65 )
-	write_file ( gs_cfgfile, gs_fcos_use_amx_bans, 70 )
-	
+	// Use charsmax for buffer sizes
+	formatex ( gs_fcos_repeat_check, charsmax ( gs_fcos_repeat_check ), "fcos_repeat_check %i", get_pcvar_num ( gp_fcos_repeat_check ) )
+	formatex ( gs_fcos_show_admin_forced_msg, charsmax ( gs_fcos_show_admin_forced_msg ), "fcos_show_admin_forced_msg %i", get_pcvar_num ( gp_fcos_show_admin_forced_msg ) )
+	formatex ( gs_fcos_warn, charsmax ( gs_fcos_warn ), "fcos_warn %i", get_pcvar_num ( gp_fcos_warn ) )
+	formatex ( gs_fcos_attempt_num_warn, charsmax ( gs_fcos_attempt_num_warn ), "fcos_attempt_num_warn %i", get_pcvar_num ( gp_fcos_attempt_num_warn ) )
+	formatex ( gs_fcos_repeat_warning, charsmax ( gs_fcos_repeat_warning ), "fcos_repeat_warning %i", get_pcvar_num ( gp_fcos_repeat_warning ) )
+	formatex ( gs_fcos_change_name, charsmax ( gs_fcos_change_name ), "fcos_change_name %i", get_pcvar_num ( gp_fcos_change_name ) )
+	formatex ( gs_fcos_attempt_num_namechange, charsmax ( gs_fcos_attempt_num_namechange ), "fcos_attempt_num_namechange %i", get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
+	formatex ( gs_fcos_slay, charsmax ( gs_fcos_slay ), "fcos_slay %i", get_pcvar_num ( gp_fcos_slay ) )
+	formatex ( gs_fcos_attempt_num_slay, charsmax ( gs_fcos_attempt_num_slay ), "fcos_attempt_num_slay %i", get_pcvar_num ( gp_fcos_attempt_num_slay ) )
+	formatex ( gs_fcos_repeat_slaying, charsmax ( gs_fcos_repeat_slaying ), "fcos_repeat_slaying %i", get_pcvar_num ( gp_fcos_repeat_slaying ) )
+	formatex ( gs_fcos_kick_or_ban, charsmax ( gs_fcos_kick_or_ban ), "fcos_kick_or_ban %i", get_pcvar_num ( gp_fcos_kick_or_ban ) )
+	formatex ( gs_fcos_attempt_num_kickorban, charsmax ( gs_fcos_attempt_num_kickorban ), "fcos_attempt_num_kickorban %i", get_pcvar_num ( gp_fcos_attempt_num_kickorban ) )
+	formatex ( gs_fcos_ban_time, charsmax ( gs_fcos_ban_time ), "fcos_ban_time %i", get_pcvar_num ( gp_fcos_ban_time ) )
+	formatex ( gs_fcos_use_amx_bans, charsmax ( gs_fcos_use_amx_bans ), "fcos_use_amx_bans %i", get_pcvar_num ( gp_fcos_use_amx_bans ) )
+
+	get_configsdir ( gs_directory, charsmax ( gs_directory ) )
+	formatex ( gs_cfgfile, charsmax ( gs_cfgfile ), "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE )
+
+	// Delete and rewrite entire file instead of writing to specific line numbers; More efficient and prevents file corruption
+	if ( file_exists ( gs_cfgfile ) )
+		delete_file ( gs_cfgfile )
+
+	// Write config header
+	write_file ( gs_cfgfile, "// KTP Cvar Checker Configuration File" )
+	write_file ( gs_cfgfile, "// Generated by KTP Config Menu" )
+	write_file ( gs_cfgfile, "" )
+
+	// Write all cvars
+	write_file ( gs_cfgfile, gs_fcos_repeat_check )
+	write_file ( gs_cfgfile, gs_fcos_show_admin_forced_msg )
+	write_file ( gs_cfgfile, gs_fcos_warn )
+	write_file ( gs_cfgfile, gs_fcos_attempt_num_warn )
+	write_file ( gs_cfgfile, gs_fcos_repeat_warning )
+	write_file ( gs_cfgfile, gs_fcos_change_name )
+	write_file ( gs_cfgfile, gs_fcos_attempt_num_namechange )
+	write_file ( gs_cfgfile, gs_fcos_slay )
+	write_file ( gs_cfgfile, gs_fcos_attempt_num_slay )
+	write_file ( gs_cfgfile, gs_fcos_repeat_slaying )
+	write_file ( gs_cfgfile, gs_fcos_kick_or_ban )
+	write_file ( gs_cfgfile, gs_fcos_attempt_num_kickorban )
+	write_file ( gs_cfgfile, gs_fcos_ban_time )
+	write_file ( gs_cfgfile, gs_fcos_use_amx_bans )
+
 	client_print ( id, print_chat, "%L", id, "FCOS_LANG_MENU_SAVE_MSG" )
-	
+
 	return PLUGIN_CONTINUE
 }
 
