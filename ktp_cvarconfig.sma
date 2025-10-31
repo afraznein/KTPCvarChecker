@@ -2,10 +2,11 @@
 *   Title:    KTP Cvar Settings Config (fcos)
 *   Author:   Nein_
 *
-*   Current Version:   3.1
-*   Release Date:      2024-10-31
+*   Current Version:   3.2
+*   Release Date:      2025-10-31
 *
 *   Changelog:
+*   3.2 2025-10-31 - Full refactoring : Added constants, organized code, cached pcvars, modernized style
 *   3.1 2025-10-31 - Optimized for AMX 1.10, fixed file writing, fixed double increment bugs
 *   3.0 2022-06-17
 *
@@ -47,15 +48,31 @@
 #include <amxmodx>
 #include <amxmisc>
 
+// ============================================================================
+// PLUGIN INFORMATION
+// ============================================================================
 
 new const gs_PLUGIN[]	= "KTP Cvar Settings Config"
-new const gs_VERSION[]	= "3.1"
+new const gs_VERSION[]	= "3.2"
 new const gs_AUTHOR[]	= "Nein_"
+new const gs_year       = 2025;
 
+// ============================================================================
+// CONSTANTS & DEFINES
+// ============================================================================
 
+// File configuration
 new const gs_FILENAME[]	= "ktp_cvar"
 new const gs_FILETYPE[]	= ".cfg"
 
+// Array size constants (matching main plugin)
+const MAX_PLAYERS = 33           // Max players + 1 (HL engine limit)
+const MENU_ITEMS = 10            // Number of menu items
+const MAX_ATTEMPT_NUM = 35       // Maximum attempt number setting
+
+// ============================================================================
+// CVAR POINTERS
+// ============================================================================
 
 new gp_fcos_repeat_check
 new gp_fcos_show_admin_forced_msg
@@ -72,27 +89,31 @@ new gp_fcos_attempt_num_kickorban
 new gp_fcos_ban_time
 new gp_fcos_use_amx_bans
 
+// ============================================================================
+// GLOBAL VARIABLES
+// ============================================================================
 
-new gi_menupage[33]
+// Menu system
+new gi_menupage[MAX_PLAYERS]
 new g_keys
 new gi_casenum
-new gs_menucase[10][64]
+new gs_menucase[MENU_ITEMS][64]
 new gs_fcosmenu[512]
 
-
+// Temporary variables for menu calculations
 new gi_warningattemptnum
 new gi_namechangeattemptnum
 new gi_slayingattemptnum
 new gi_kickorbanattemptnum
 new gi_kickorbansetting
-new gs_kickorbanshow[6]
+new gs_kickorbanshow[8]
 new gi_bantime
 
-
-new gs_directory[33]
+// File paths
+new gs_directory[64]
 new gs_cfgfile[128]
 
-
+// Config strings for file writing
 new gs_fcos_repeat_check[64]
 new gs_fcos_show_admin_forced_msg[64]
 new gs_fcos_warn[64]
@@ -108,8 +129,12 @@ new gs_fcos_attempt_num_kickorban[64]
 new gs_fcos_ban_time[64]
 new gs_fcos_use_amx_bans[64]
 
-
+// MOTD URL
 new gs_motdurl[128]
+
+// ============================================================================
+// PLUGIN INITIALIZATION
+// ============================================================================
 
 
 public plugin_init ()
@@ -140,264 +165,225 @@ public plugin_init ()
 	register_menucmd ( register_menuid ( "[KTP CVAR]" ), 1023, "fn_menuselection" )
 }
 
-public fn_checkaccess ( id, level, cid )
-{
-	if ( ! cmd_access ( id, level, cid, 1 ) ) return PLUGIN_HANDLED
-	
-	else
-	{
-		gi_menupage[id] = 1
-		fn_showfcosmenu ( id )
-	}
-	
+// ============================================================================
+// MENU ACCESS & DISPLAY
+// ============================================================================
+
+public fn_checkaccess ( id, level, cid ) {
+	if ( ! cmd_access ( id, level, cid, 1 )) return PLUGIN_HANDLED
+
+	gi_menupage[id] = 1
+	fn_showfcosmenu ( id )
 	return PLUGIN_HANDLED
 }
 
-public fn_showfcosmenu ( id )
-{
-	g_keys =  (1<<0)|(1<<1)|(1<<2)|(1<<3)|(1<<4)|(1<<5)|(1<<6)|(1<<7)|(1<<8)|(1<<9)
-	
-	for ( gi_casenum = 0; gi_casenum < 10; ++gi_casenum )
-	{
+public fn_showfcosmenu ( id ) {
+	g_keys = (1<<0)|(1<<1)|(1<<2)|(1<<3)|(1<<4)|(1<<5)|(1<<6)|(1<<7)|(1<<8)|(1<<9)
+	// Clear menu items
+	for ( gi_casenum = 0; gi_casenum < MENU_ITEMS; ++gi_casenum ) {
 		gs_menucase[gi_casenum][0] = 0
 	}
-	
-	switch ( gi_menupage[id] )
-	{
-		case 1:
-		{
-			formatex ( gs_menucase[0], 63, "\w1. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_CHECKING", get_pcvar_num ( gp_fcos_repeat_check ) ? "ON" : "OFF" )
-			formatex ( gs_menucase[1], 63, "\w2. %L\R\y%s^n", id, "FCOS_LANG_MENU_SHOW_ADMIN_MESSAGE", get_pcvar_num ( gp_fcos_show_admin_forced_msg ) ? "ON" : "OFF" )
+	// Cache pcvar values (optimization - reduces get_pcvar_num calls)
+	new repeat_check = get_pcvar_num ( gp_fcos_repeat_check )
+	new show_admin_msg = get_pcvar_num ( gp_fcos_show_admin_forced_msg )
+	new warn = get_pcvar_num ( gp_fcos_warn )
+	new warn_attempt = get_pcvar_num ( gp_fcos_attempt_num_warn )
+	new warn_repeat = get_pcvar_num ( gp_fcos_repeat_warning )
+	new change_name = get_pcvar_num ( gp_fcos_change_name )
+	new name_attempt = get_pcvar_num ( gp_fcos_attempt_num_namechange )
+
+	switch ( gi_menupage[id] ) {
+		case 1:{
+			formatex ( gs_menucase[0], charsmax ( gs_menucase[] ), "\w1. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_CHECKING", repeat_check ? "ON" : "OFF" )
+			formatex ( gs_menucase[1], charsmax ( gs_menucase[] ), "\w2. %L\R\y%s^n", id, "FCOS_LANG_MENU_SHOW_ADMIN_MESSAGE", show_admin_msg ? "ON" : "OFF" )
 			
-			if ( ! get_pcvar_num ( gp_fcos_repeat_check ) )
-			{
-				formatex ( gs_menucase[2], 63, "\d3. %L\R\d%s^n", id, "FCOS_LANG_MENU_WARNING", get_pcvar_num ( gp_fcos_warn ) ? "ON" : "OFF" )
-				formatex ( gs_menucase[3], 63, "\d4. %L\R\d%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_warn ) )
-				formatex ( gs_menucase[4], 63, "\d5. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", get_pcvar_num ( gp_fcos_repeat_warning ) ? "ON" : "OFF" )
-				formatex ( gs_menucase[5], 63, "\d6. %L\R\d%s^n", id, "FCOS_LANG_MENU_NAME_CHANGE", get_pcvar_num ( gp_fcos_change_name ) ? "ON" : "OFF" )
-				formatex ( gs_menucase[6], 63, "\d7. %L\R\d%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
-				formatex ( gs_menucase[7], 63, "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
-				formatex ( gs_menucase[8], 63, "\d9. %L^n", id, "FCOS_LANG_MENU_MORE" )
-				formatex ( gs_menucase[9], 63, "\w0. %L", id, "FCOS_LANG_MENU_EXIT" )
+			if ( !repeat_check ) {
+				formatex ( gs_menucase[2], charsmax ( gs_menucase[] ), "\d3. %L\R\d%s^n", id, "FCOS_LANG_MENU_WARNING", warn ? "ON" : "OFF" )
+				formatex ( gs_menucase[3], charsmax ( gs_menucase[] ), "\d4. %L\R\d%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", warn_attempt )
+				formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\d5. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", warn_repeat ? "ON" : "OFF" )
+				formatex ( gs_menucase[5], charsmax ( gs_menucase[] ), "\d6. %L\R\d%s^n", id, "FCOS_LANG_MENU_NAME_CHANGE", change_name ? "ON" : "OFF" )
+				formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\d7. %L\R\d%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", name_attempt )
+				formatex ( gs_menucase[7], charsmax ( gs_menucase[] ), "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
+				formatex ( gs_menucase[8], charsmax ( gs_menucase[] ), "\d9. %L^n", id, "FCOS_LANG_MENU_MORE" )
+				formatex ( gs_menucase[9], charsmax ( gs_menucase[] ), "\w0. %L", id, "FCOS_LANG_MENU_EXIT" )
 				g_keys -= (1<<2)|(1<<3)|(1<<4)|(1<<5)|(1<<6)|(1<<8)
 			}
-			
-			else
-			{
-				formatex ( gs_menucase[2], 63, "\w3. %L\R\y%s^n", id, "FCOS_LANG_MENU_WARNING", get_pcvar_num ( gp_fcos_warn ) ? "ON" : "OFF" )
-				
-				if ( ! get_pcvar_num ( gp_fcos_warn ) )
-				{
-					formatex ( gs_menucase[3], 63, "\d4. %L\R\d%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_warn ) )
-					formatex ( gs_menucase[4], 63, "\d5. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", get_pcvar_num ( gp_fcos_repeat_warning ) ? "ON" : "OFF" )
+			else {
+				formatex ( gs_menucase[2], charsmax ( gs_menucase[] ), "\w3. %L\R\y%s^n", id, "FCOS_LANG_MENU_WARNING", warn ? "ON" : "OFF" )
+
+				if ( !warn ) {
+					formatex ( gs_menucase[3], charsmax ( gs_menucase[] ), "\d4. %L\R\d%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", warn_attempt )
+					formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\d5. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", warn_repeat ? "ON" : "OFF" )
 					g_keys -= (1<<3)|(1<<4)
 				}
-				
-				else
-				{
-					formatex ( gs_menucase[3], 63, "\w4. %L\R\y%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_warn ) )
-					formatex ( gs_menucase[4], 63, "\w5. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", get_pcvar_num ( gp_fcos_repeat_warning ) ? "ON" : "OFF" )
+				else {
+					formatex ( gs_menucase[3], charsmax ( gs_menucase[] ), "\w4. %L\R\y%i^n", id, "FCOS_LANG_MENU_WARNING_ATTEMPT", warn_attempt )
+					formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\w5. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_WARNING", warn_repeat ? "ON" : "OFF" )
 				}
-				
-				formatex ( gs_menucase[5], 63, "\w6. %L\R\y%s^n", id, "FCOS_LANG_MENU_NAME_CHANGE", get_pcvar_num ( gp_fcos_change_name ) ? "ON" : "OFF" )
-				
-				if ( ! get_pcvar_num ( gp_fcos_change_name ) )
-				{
-					formatex ( gs_menucase[6], 63, "\d7. %L\R\d%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
+
+				formatex ( gs_menucase[5], charsmax ( gs_menucase[] ), "\w6. %L\R\y%s^n", id, "FCOS_LANG_MENU_NAME_CHANGE", change_name ? "ON" : "OFF" )
+
+				if ( !change_name ) {
+					formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\d7. %L\R\d%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", name_attempt )
 					g_keys -= (1<<6)
 				}
-				
-				else
-				{
-					formatex ( gs_menucase[6], 63, "\w7. %L\R\y%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_namechange ) )
+				else {
+					formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\w7. %L\R\y%i^n^n", id, "FCOS_LANG_MENU_NAME_CHANGE_ATTEMPT", name_attempt )
 				}
-				
-				formatex ( gs_menucase[7], 63, "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
-				formatex ( gs_menucase[8], 63, "\w9. %L^n", id, "FCOS_LANG_MENU_MORE" )
-				formatex ( gs_menucase[9], 63, "\w0. %L", id, "FCOS_LANG_MENU_EXIT" )
+
+				formatex ( gs_menucase[7], charsmax ( gs_menucase[] ), "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
+				formatex ( gs_menucase[8], charsmax ( gs_menucase[] ), "\w9. %L^n", id, "FCOS_LANG_MENU_MORE" )
+				formatex ( gs_menucase[9], charsmax ( gs_menucase[] ), "\w0. %L", id, "FCOS_LANG_MENU_EXIT" )
 			}
 		}
 		
-		case 2:
-		{
+		case 2: { // Cache pcvar values (optimization - reduces get_pcvar_num calls)
+			new slay = get_pcvar_num ( gp_fcos_slay )
+			new slay_attempt = get_pcvar_num ( gp_fcos_attempt_num_slay )
+			new slay_repeat = get_pcvar_num ( gp_fcos_repeat_slaying )
 			gi_kickorbansetting = get_pcvar_num ( gp_fcos_kick_or_ban )
-			
+			new kickorban_attempt = get_pcvar_num ( gp_fcos_attempt_num_kickorban )
+			gi_bantime = get_pcvar_num ( gp_fcos_ban_time )
+			new use_amx_bans = get_pcvar_num ( gp_fcos_use_amx_bans )
+
 			if ( gi_kickorbansetting == 0 ) copy ( gs_kickorbanshow, 5, "OFF" )
 			else if ( gi_kickorbansetting == 1 ) copy ( gs_kickorbanshow, 5, "KICK" )
 			else if ( gi_kickorbansetting == 2 ) copy ( gs_kickorbanshow, 5, "BAN" )
-			
-			gi_bantime = get_pcvar_num ( gp_fcos_ban_time )
-			
-			formatex ( gs_menucase[0], 63, "\w1. %L\R\y%s^n", id, "FCOS_LANG_MENU_SLAYING", get_pcvar_num ( gp_fcos_slay ) ? "ON" : "OFF" )
-			
-			if ( ! get_pcvar_num ( gp_fcos_slay ) )
-			{
-				formatex ( gs_menucase[1], 63, "\d2. %L\R\d%i^n", id, "FCOS_LANG_MENU_SLAYING_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_slay ) )
-				formatex ( gs_menucase[2], 63, "\d3. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_SLAYING", get_pcvar_num ( gp_fcos_repeat_slaying ) ? "ON" : "OFF" )
+
+			formatex ( gs_menucase[0], charsmax ( gs_menucase[] ), "\w1. %L\R\y%s^n", id, "FCOS_LANG_MENU_SLAYING", slay ? "ON" : "OFF" )
+
+			if ( !slay ) {
+				formatex ( gs_menucase[1], charsmax ( gs_menucase[] ), "\d2. %L\R\d%i^n", id, "FCOS_LANG_MENU_SLAYING_ATTEMPT", slay_attempt )
+				formatex ( gs_menucase[2], charsmax ( gs_menucase[] ), "\d3. %L\R\d%s^n", id, "FCOS_LANG_MENU_REPEAT_SLAYING", slay_repeat ? "ON" : "OFF" )
 				g_keys -= (1<<1)|(1<<2)
 			}
-			
-			else
-			{
-				formatex ( gs_menucase[1], 63, "\w2. %L\R\y%i^n", id, "FCOS_LANG_MENU_SLAYING_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_slay ) )
-				formatex ( gs_menucase[2], 63, "\w3. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_SLAYING", get_pcvar_num ( gp_fcos_repeat_slaying ) ? "ON" : "OFF" )
+			else {
+				formatex ( gs_menucase[1], charsmax ( gs_menucase[] ), "\w2. %L\R\y%i^n", id, "FCOS_LANG_MENU_SLAYING_ATTEMPT", slay_attempt )
+				formatex ( gs_menucase[2], charsmax ( gs_menucase[] ), "\w3. %L\R\y%s^n", id, "FCOS_LANG_MENU_REPEAT_SLAYING", slay_repeat ? "ON" : "OFF" )
 			}
-			
-			formatex ( gs_menucase[3], 63, "\w4. %L\R\y%s^n", id, "FCOS_LANG_MENU_KICK_OR_BAN", gs_kickorbanshow )
-			
-			if ( gi_kickorbansetting == 0 )
-			{
-				formatex ( gs_menucase[4], 63, "\d5. %L\R\d%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_kickorban ) )
-				formatex ( gs_menucase[5], 63, gi_bantime ? "\d6. %L\R\d%i MINS^n" : "\d6. %L\R\dPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
-				formatex ( gs_menucase[6], 63, "\d7. %L\R\d%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", get_pcvar_num ( gp_fcos_use_amx_bans ) ? "ON" : "OFF" )
+
+			formatex ( gs_menucase[3], charsmax ( gs_menucase[] ), "\w4. %L\R\y%s^n", id, "FCOS_LANG_MENU_KICK_OR_BAN", gs_kickorbanshow )
+
+			if ( gi_kickorbansetting == 0 ) {
+				formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\d5. %L\R\d%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", kickorban_attempt )
+				formatex ( gs_menucase[5], charsmax ( gs_menucase[] ), gi_bantime ? "\d6. %L\R\d%i MINS^n" : "\d6. %L\R\dPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
+				formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\d7. %L\R\d%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", use_amx_bans ? "ON" : "OFF" )
 				g_keys -= (1<<4)|(1<<5)|(1<<6)
 			}
-			
-			else if ( gi_kickorbansetting == 1 )
-			{
-				formatex ( gs_menucase[4], 63, "\w5. %L\R\y%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_kickorban ) )
-				formatex ( gs_menucase[5], 63, gi_bantime ? "\d6. %L\R\d%i MINS^n" : "\d6. %L\R\dPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
-				formatex ( gs_menucase[6], 63, "\d7. %L\R\d%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", get_pcvar_num ( gp_fcos_use_amx_bans ) ? "ON" : "OFF" )
+			else if ( gi_kickorbansetting == 1 ) {
+				formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\w5. %L\R\y%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", kickorban_attempt )
+				formatex ( gs_menucase[5], charsmax ( gs_menucase[] ), gi_bantime ? "\d6. %L\R\d%i MINS^n" : "\d6. %L\R\dPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
+				formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\d7. %L\R\d%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", use_amx_bans ? "ON" : "OFF" )
 				g_keys -= (1<<5)|(1<<6)
 			}
-			
-			else
-			{
-				formatex ( gs_menucase[4], 63, "\w5. %L\R\y%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", get_pcvar_num ( gp_fcos_attempt_num_kickorban ) )
-				formatex ( gs_menucase[5], 63, gi_bantime ? "\w6. %L\R\y%i MINS^n" : "\w6. %L\R\yPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
-				formatex ( gs_menucase[6], 63, "\w7. %L\R\y%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", get_pcvar_num ( gp_fcos_use_amx_bans ) ? "ON" : "OFF" )
+			else {
+				formatex ( gs_menucase[4], charsmax ( gs_menucase[] ), "\w5. %L\R\y%i^n", id, "FCOS_LANG_MENU_KICK_OR_BAN_ATTEMPT", kickorban_attempt )
+				formatex ( gs_menucase[5], charsmax ( gs_menucase[] ), gi_bantime ? "\w6. %L\R\y%i MINS^n" : "\w6. %L\R\yPERMANENT^n", id, "FCOS_LANG_MENU_BAN_TIME", gi_bantime )
+				formatex ( gs_menucase[6], charsmax ( gs_menucase[] ), "\w7. %L\R\y%s^n^n", id, "FCOS_LANG_MENU_USE_AMX_BAN", use_amx_bans ? "ON" : "OFF" )
 			}
-			
-			formatex ( gs_menucase[7], 63, "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
-			formatex ( gs_menucase[9], 63, "\w0. %L", id, "FCOS_LANG_MENU_BACK" )
+
+			formatex ( gs_menucase[7], charsmax ( gs_menucase[] ), "\w8. %L^n^n", id, "FCOS_LANG_MENU_SAVE" )
+			formatex ( gs_menucase[9], charsmax ( gs_menucase[] ), "\w0. %L", id, "FCOS_LANG_MENU_BACK" )
 			g_keys -= (1<<8)
 		}
 	}
 
-	formatex ( gs_fcosmenu, 511, "\y[KTP CVAR] Menu:^n^n%s%s%s%s%s%s%s%s%s%s", gs_menucase[0], gs_menucase[1], gs_menucase[2], gs_menucase[3], gs_menucase[4], gs_menucase[5], gs_menucase[6], gs_menucase[7], gs_menucase[8], gs_menucase[9] )
-	
+	formatex ( gs_fcosmenu, charsmax ( gs_fcosmenu ), "\y[KTP CVAR] Menu:^n^n%s%s%s%s%s%s%s%s%s%s", gs_menucase[0], gs_menucase[1], gs_menucase[2], gs_menucase[3], gs_menucase[4], gs_menucase[5], gs_menucase[6], gs_menucase[7], gs_menucase[8], gs_menucase[9] )
 	show_menu ( id, g_keys, gs_fcosmenu )
 	
 	return PLUGIN_HANDLED
 }
 
-public fn_menuselection ( id, key )
-{
-	if ( gi_menupage[id] == 1 )
-	{
-		switch ( key )
-		{
+// ============================================================================
+// MENU SELECTION HANDLERS
+// ============================================================================
+
+public fn_menuselection ( id, key ) {
+	if ( gi_menupage[id] == 1 ) {
+		switch ( key ) {
 			case 0: set_pcvar_num ( gp_fcos_repeat_check, get_pcvar_num ( gp_fcos_repeat_check ) ? 0 : 1 )
 			case 1: set_pcvar_num ( gp_fcos_show_admin_forced_msg, get_pcvar_num ( gp_fcos_show_admin_forced_msg ) ? 0 : 1 )
 			case 2: set_pcvar_num ( gp_fcos_warn, get_pcvar_num ( gp_fcos_warn ) ? 0 : 1 )
-			
-			case 3:
-			{
-				// Fixed double increment bug
+			case 3:{ // Fixed double increment bug
 				gi_warningattemptnum = get_pcvar_num ( gp_fcos_attempt_num_warn )
 				gi_warningattemptnum++
-				if ( gi_warningattemptnum > 35 ) gi_warningattemptnum = 1
+				if ( gi_warningattemptnum > MAX_ATTEMPT_NUM ) gi_warningattemptnum = 1
 				set_pcvar_num ( gp_fcos_attempt_num_warn, gi_warningattemptnum )
 			}
-			
 			case 4: set_pcvar_num ( gp_fcos_repeat_warning, get_pcvar_num ( gp_fcos_repeat_warning ) ? 0 : 1 )
 			case 5: set_pcvar_num ( gp_fcos_change_name, get_pcvar_num ( gp_fcos_change_name ) ? 0 : 1 )
-			
-			case 6:
-			{
-				// Fixed double increment bug
+			case 6: { // Fixed double increment bug
 				gi_namechangeattemptnum = get_pcvar_num ( gp_fcos_attempt_num_namechange )
 				gi_namechangeattemptnum++
-				if ( gi_namechangeattemptnum > 35 ) gi_namechangeattemptnum = 1
+				if ( gi_namechangeattemptnum > MAX_ATTEMPT_NUM ) gi_namechangeattemptnum = 1
 				set_pcvar_num ( gp_fcos_attempt_num_namechange, gi_namechangeattemptnum )
 			}
-			
 			case 7: fn_fcossave ( id )
-			
-			case 8:
-			{
+			case 8: {
 				gi_menupage[id] = 2
 				fn_showfcosmenu ( id )
 				return PLUGIN_HANDLED
 			}
-			
-			case 9:
-			{
+			case 9: {
 				gi_menupage[id] = 0
 				return PLUGIN_HANDLED
 			}
 		}
-		
 		fn_showfcosmenu ( id )
 		return PLUGIN_HANDLED
 	}
 	
-	if ( gi_menupage[id] == 2 )
-	{
-		switch ( key )
-		{
-			case 0: set_pcvar_num ( gp_fcos_slay, get_pcvar_num ( gp_fcos_slay ) ? 0 : 1 )
-			
-			case 1:
-			{
-				// Fixed double increment bug
+	if ( gi_menupage[id] == 2 ) {
+		switch ( key ) {
+			case 0: set_pcvar_num ( gp_fcos_slay, get_pcvar_num ( gp_fcos_slay ) ? 0 : 1 ) 
+			case 1: { // Fixed double increment bug
 				gi_slayingattemptnum = get_pcvar_num ( gp_fcos_attempt_num_slay )
 				gi_slayingattemptnum++
-				if ( gi_slayingattemptnum > 35 ) gi_slayingattemptnum = 1
+				if ( gi_slayingattemptnum > MAX_ATTEMPT_NUM ) gi_slayingattemptnum = 1
 				set_pcvar_num ( gp_fcos_attempt_num_slay, gi_slayingattemptnum )
 			}
 			
 			case 2: set_pcvar_num ( gp_fcos_repeat_slaying, get_pcvar_num ( gp_fcos_repeat_slaying ) ? 0 : 1 )
-			
-			case 3:
-			{
+			case 3: {
 				gi_kickorbansetting = get_pcvar_num ( gp_fcos_kick_or_ban )
 				if ( gi_kickorbansetting == 0 ) set_pcvar_num ( gp_fcos_kick_or_ban, 1 )
 				else if ( gi_kickorbansetting == 1 ) set_pcvar_num ( gp_fcos_kick_or_ban, 2 )
 				else if ( gi_kickorbansetting == 2 ) set_pcvar_num ( gp_fcos_kick_or_ban, 0 )
 			}
-			
-			case 4:
-			{
-				// Fixed double increment bug
+			case 4: { // Fixed double increment bug
 				gi_kickorbanattemptnum = get_pcvar_num ( gp_fcos_attempt_num_kickorban )
 				gi_kickorbanattemptnum++
-				if ( gi_kickorbanattemptnum > 35 ) gi_kickorbanattemptnum = 1
+				if ( gi_kickorbanattemptnum > MAX_ATTEMPT_NUM ) gi_kickorbanattemptnum = 1
 				set_pcvar_num ( gp_fcos_attempt_num_kickorban, gi_kickorbanattemptnum )
 			}
 			
-			case 5:
-			{
+			case 5: {
 				gi_bantime = get_pcvar_num ( gp_fcos_ban_time )
 				if ( gi_bantime + 30 > 600 || gi_bantime > 600 ) set_pcvar_num ( gp_fcos_ban_time, 0 )
 				else set_pcvar_num ( gp_fcos_ban_time, gi_bantime += 30 )
-			}
-			
+			} 
 			case 6: set_pcvar_num ( gp_fcos_use_amx_bans, get_pcvar_num ( gp_fcos_use_amx_bans ) ? 0 : 1 )
-			
 			case 7: fn_fcossave ( id )
-			
-			case 9:
-			{
+			case 9: {
 				gi_menupage[id] = 1
 				fn_showfcosmenu ( id )
 				return PLUGIN_HANDLED
 			}
 		}
 	}
-	
 	update_fcosmenu ()
 	return PLUGIN_HANDLED
 }
 
-public update_fcosmenu ()
-{
+// ============================================================================
+// MENU UPDATE HANDLER
+// ============================================================================
+
+public update_fcosmenu () {
 	new i_playerID[32], i_playercnt, menu, keys
-	
 	get_players ( i_playerID, i_playercnt )
 	
-	for ( new i_playernum = 0; i_playernum < i_playercnt; ++i_playernum )
-	{
+	for ( new i_playernum = 0; i_playernum < i_playercnt; ++i_playernum ) {
 		if ( gi_menupage[i_playerID[i_playernum]] > 0 && ! get_user_menu ( i_playerID[i_playernum], menu, keys ) ) gi_menupage[i_playerID[i_playernum]] = 0
 		else if ( gi_menupage[i_playerID[i_playernum]] > 0 ) fn_showfcosmenu ( i_playerID[i_playernum] )
 		else return PLUGIN_CONTINUE
@@ -406,8 +392,11 @@ public update_fcosmenu ()
 	return PLUGIN_CONTINUE
 }
 
-public fn_fcossave ( id )
-{
+// ============================================================================
+// CONFIG FILE SAVE HANDLER
+// ============================================================================
+
+public fn_fcossave ( id ) {
 	// Use charsmax for buffer sizes
 	formatex ( gs_fcos_repeat_check, charsmax ( gs_fcos_repeat_check ), "fcos_repeat_check %i", get_pcvar_num ( gp_fcos_repeat_check ) )
 	formatex ( gs_fcos_show_admin_forced_msg, charsmax ( gs_fcos_show_admin_forced_msg ), "fcos_show_admin_forced_msg %i", get_pcvar_num ( gp_fcos_show_admin_forced_msg ) )
@@ -428,8 +417,7 @@ public fn_fcossave ( id )
 	formatex ( gs_cfgfile, charsmax ( gs_cfgfile ), "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE )
 
 	// Delete and rewrite entire file instead of writing to specific line numbers; More efficient and prevents file corruption
-	if ( file_exists ( gs_cfgfile ) )
-		delete_file ( gs_cfgfile )
+	if ( file_exists ( gs_cfgfile ) ) delete_file ( gs_cfgfile )
 
 	// Write config header
 	write_file ( gs_cfgfile, "// KTP Cvar Checker Configuration File" )
@@ -453,17 +441,18 @@ public fn_fcossave ( id )
 	write_file ( gs_cfgfile, gs_fcos_use_amx_bans )
 
 	client_print ( id, print_chat, "%L", id, "FCOS_LANG_MENU_SAVE_MSG" )
-
 	return PLUGIN_CONTINUE
 }
 
-public fn_showfcoshelp ( id, level, cid )
-{
+// ============================================================================
+// HELP DISPLAY HANDLER
+// ============================================================================
+
+public fn_showfcoshelp ( id, level, cid ) {
 	if ( ! cmd_access ( id, level, cid, 1 ) ) return PLUGIN_HANDLED
 	
-	else
-	{
-		formatex ( gs_motdurl, 127, "https://discord.gg/2TKYnK7Q9J" )
+	else {
+		formatex ( gs_motdurl, charsmax ( gs_motdurl ), "https://discord.gg/2TKYnK7Q9J" )
 		show_motd ( id, gs_motdurl, "KTP Cvar Checker" )
 		return PLUGIN_HANDLED
 	}
