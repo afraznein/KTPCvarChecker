@@ -55,7 +55,6 @@
 new const gs_PLUGIN[]	= "KTP Cvar Settings Config"
 new const gs_VERSION[]	= "3.2"
 new const gs_AUTHOR[]	= "Nein_"
-new const gs_year       = 2025;
 
 // ============================================================================
 // CONSTANTS & DEFINES
@@ -65,10 +64,9 @@ new const gs_year       = 2025;
 new const gs_FILENAME[]	= "ktp_cvar"
 new const gs_FILETYPE[]	= ".cfg"
 
-// Array size constants (matching main plugin)
-const MAX_PLAYERS = 33           // Max players + 1 (HL engine limit)
-const MENU_ITEMS = 10            // Number of menu items
-const MAX_ATTEMPT_NUM = 35       // Maximum attempt number setting
+// Constants
+#define MENU_ITEMS 10
+#define MAX_ATTEMPT_NUM 35
 
 // ============================================================================
 // CVAR POINTERS
@@ -450,13 +448,10 @@ public fn_fcossave ( id ) {
 
 public fn_showfcoshelp ( id, level, cid ) {
 	if ( ! cmd_access ( id, level, cid, 1 ) ) return PLUGIN_HANDLED
-	
-	else {
-		formatex ( gs_motdurl, charsmax ( gs_motdurl ), "https://discord.gg/2TKYnK7Q9J" )
-		show_motd ( id, gs_motdurl, "KTP Cvar Checker" )
-		return PLUGIN_HANDLED
-	}
-	
+
+	formatex ( gs_motdurl, charsmax ( gs_motdurl ), "https://discord.gg/2TKYnK7Q9J" )
+	show_motd ( id, gs_motdurl, "KTP Cvar Checker" )
+
 	return PLUGIN_HANDLED
 }
 /* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE

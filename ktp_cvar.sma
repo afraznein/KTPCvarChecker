@@ -57,11 +57,10 @@ new const gs_graph[] = "net_graph";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-const MAX_PLAYERS = 33;           // Max players + 1 (HL engine limit)
-const TOTAL_CVARS = 57;           // Total number of cvars to check
-const MIN_MAX_CVAR_START = 49;    // Index where min/max range cvars begin
-const LAST_CVAR_INDEX = 56;       // Index of last cvar (fps_max)
-const ALT_VALUES_COUNT = 8;       // Number of alt (max) values
+#define TOTAL_CVARS 57
+#define MIN_MAX_CVAR_START 49
+#define LAST_CVAR_INDEX 56
+#define ALT_VALUES_COUNT 8
 
 // ============================================================================
 // CVAR POINTERS
@@ -393,7 +392,7 @@ public client_putinserver(id) {
 	}
 }
 
-public client_disconnect(id) {
+public client_disconnected(id) {
 	gb_StopChecking[id] = true;
 	remove_task(id);
 	gb_FirstCheckComplete[id] = false;
@@ -598,8 +597,8 @@ public fn_formatandshowmotd(id, const s_CVARNAME[], Float: calFloatValue, Float:
 	formatex(gs_mainmsg4, charsmax(gs_mainmsg4), "%L", id, "FCOS_LANG_MOTD_MAINMSG4")
 	formatex(gs_mainmsg5, charsmax(gs_mainmsg5), "%L", id, "FCOS_LANG_MOTD_MAINMSG5")
 
-	gi_len = formatex(gs_motd, charsmax(gs_motd), "<body bgcolor=^" #00000 ^ "><font color=^" #FFB000 ^ ">")
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "<center><b><font size=^" 8 ^ " color=^" #FF0000 ^ ">%s</font><br>", gs_motdtitle)
+	gi_len = formatex(gs_motd, charsmax(gs_motd), "<body bgcolor='#00000'><font color='#FFB000'>")
+	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "<center><b><font size='8' color='#FF0000'>%s</font><br>", gs_motdtitle)
 	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s</center><br>", gs_subtitle)
 	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg1)
 	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg2)
