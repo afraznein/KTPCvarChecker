@@ -375,8 +375,8 @@ public OnUserInfoChange(id, const userinfo[]) {
 
 public fn_msginitial(id) {
 	get_user_name(id, gs_logname, 31);
-	client_print(id, print_chat,    "%s version %s, %d KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
-	client_print(id, print_console, "%s version %s, %d KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
+	client_print(id, print_chat,    "%d %s version %s, KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
+	client_print(id, print_console, "%d %s version %s, KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
 	client_print(id, print_chat,    "Initializing KTP Cvar Checker for %s.", gs_logname);
 	client_print(id, print_console, "Initializing KTP Cvar Checker for %s.", gs_logname);
 }
