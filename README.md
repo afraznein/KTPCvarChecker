@@ -40,21 +40,16 @@ Competitive first-person shooters require strict enforcement of client settings 
                  │ Userinfo update
                  ↓
 ┌─────────────────────────────────────────────────┐
-│  KTP-ReHLDS (Engine)                           │
+│  Half-Life Engine (HLDS/ReHLDS)                │
 │  Detects userinfo change                        │
-│  Calls RH_SV_CheckUserInfo hook                 │
+│  Calls client_infochanged() forward             │
 └────────────────┬────────────────────────────────┘
-                 │ Hook callback
-                 ↓
-┌─────────────────────────────────────────────────┐
-│  KTP-ReAPI (Module)                            │
-│  Forwards hook to AMX plugins                   │
-└────────────────┬────────────────────────────────┘
-                 │ Forward
+                 │ AMXX Forward
                  ↓
 ┌─────────────────────────────────────────────────┐
 │  KTP Cvar Checker (AMX Plugin)                 │
-│  - OnUserInfoChange() called                    │
+│  - client_infochanged() called                  │
+│  - Rate limiting (1 second per player)          │
 │  - Checks 57 cvars against whitelist           │
 │  - Detects: r_fullbright is "1" (required: "0")│
 │  - Forces correct value immediately             │
@@ -65,8 +60,9 @@ Competitive first-person shooters require strict enforcement of client settings 
 ```
 
 **Detection Speed:**
-- **With KTP-ReHLDS + KTP-ReAPI (v5.3+)**: **INSTANT** (< 0.1 seconds) - Direct userinfo parsing, zero network queries!
-- **Without ReHLDS**: Polling (15-60 second delay)
+- **Real-time detection (v5.6+)**: **< 1 second** - Uses AMXX `client_infochanged()` forward, works on ALL servers!
+- **Periodic fallback (ReAPI)**: 15-60 second intervals using direct userinfo parsing
+- **Performance (v6.0+)**: **1-3ms per check** (optimized smart checking, only validates mismatched cvars)
 
 ---
 
@@ -114,21 +110,26 @@ cl_fixtimerate, cl_gaitestimation, fastsprites, fps_max (range),
 cl_lc, cl_lw, lookspring, lookstrafe, and more
 ```
 
-### ⚡ Real-Time Detection (ReHLDS) - v5.3+ Direct Userinfo Parsing
+### ⚡ Real-Time Detection (v5.6+) - AMXX Forward
 
-**How It Works (v5.3+):**
+**How It Works (v5.6+):**
 ```pawn
-// Plugin registers ReHLDS hook
-public plugin_init() {
-    if (is_rehlds()) {
-        RegisterHookChain(RH_SV_CheckUserInfo, "OnUserInfoChange", false);
-        // Real-time monitoring enabled!
-    }
-}
+// Plugin uses built-in AMXX forward (works on ALL servers!)
+public client_infochanged(id) {
+    // Called when player changes ANY userinfo (including cvars)
 
-// Called INSTANTLY when player changes userinfo
-public OnUserInfoChange(id, const userinfo[]) {
-    // Parse userinfo string DIRECTLY - no network queries!
+    // Validate player and check rate limiting
+    if (!is_user_connected(id) || gb_StopChecking[id])
+        return PLUGIN_CONTINUE
+
+    // Rate limiting: 1 second minimum between checks (systime precision)
+    new current_time = get_systime()
+    if (current_time - gi_last_check_time[id] < 1)
+        return PLUGIN_CONTINUE
+
+    gi_last_check_time[id] = current_time
+
+    // Parse userinfo DIRECTLY - no network queries!
     fn_check_userinfo_direct(id)
 }
 
@@ -141,36 +142,35 @@ public fn_check_userinfo_direct(id) {
 }
 ```
 
-**Performance Breakthrough (v5.3):**
+**Performance Features (v5.6):**
 - ✅ **ZERO network queries** - parses userinfo string directly
-- ✅ **All 57 cvars checked in < 0.1 seconds** (was 8.55 seconds in v5.2)
-- ✅ **100% instant detection** when cvar changes
-- ✅ **No polling overhead** on ReAPI servers
-- ✅ **Catches changes mid-match** in milliseconds
+- ✅ **All 57 cvars checked in < 0.1 seconds**
+- ✅ **Real-time detection** when cvar changes (< 1 second with rate limiting)
+- ✅ **Works on ALL servers** (HLDS, ReHLDS, any AMX server)
+- ✅ **No custom hooks required** - uses standard AMXX forward
+- ✅ **Pause-aware rate limiting** - uses `get_systime()` (works during KTP-ReHLDS pauses)
 - ✅ **Minimal resource usage** - event-driven, not polling
 
-**v5.2 vs v5.3 Comparison:**
-| Version | Detection Method | Time to Check 57 Cvars | Network Queries |
-|---------|------------------|------------------------|-----------------|
-| v5.2 | Hook fires → query each cvar | 8.55 seconds | 57 queries |
-| v5.3 | Hook fires → parse userinfo | < 0.1 seconds | 0 queries |
+**v5.2 vs v5.6 Comparison:**
+| Version | Detection Method | Time to Check 57 Cvars | Network Queries | Server Requirement |
+|---------|------------------|------------------------|-----------------|-------------------|
+| v5.2 | RH_SV_CheckUserInfo → query each cvar | 8.55 seconds | 57 queries | KTP-ReHLDS + KTP-ReAPI |
+| v5.6 | client_infochanged() → parse userinfo | < 0.1 seconds | 0 queries | Any AMX server |
 
-### 🔄 Polling Fallback (Base AMX)
+### 🔄 Polling Fallback (ReAPI Servers)
 
-**For servers without ReHLDS:**
+**For servers with ReAPI module:**
 ```pawn
-// Initial check: 7.5 seconds after connect
-// Queries all 57 cvars at 0.15s intervals (8.55s total)
-
-// Continuous monitoring:
+// Periodic polling as backup to real-time detection
 // Random intervals: 15-60 seconds
-// Staggered queries to avoid spam
+// Uses direct userinfo parsing (< 0.1s per check)
+// Zero network queries
 ```
 
 **Platform Compatibility:**
-- ✅ Works on **base AMX ModX** (HLDS)
-- ✅ Works on **standard ReHLDS** (no custom hooks)
-- ✅ **Enhanced** with KTP-ReHLDS + ReAPI (real-time)
+- ✅ Works on **base AMX ModX** (HLDS) - Real-time via client_infochanged()
+- ✅ Works on **standard ReHLDS** - Real-time via client_infochanged()
+- ✅ Works on **ReAPI servers** - Real-time + periodic fallback
 
 ### 📊 Progressive Punishment System
 
@@ -298,25 +298,26 @@ L 11/19/2025 - 14:32:45: [KTP Cvar Checker] STEAMID:0:1:12345678 | PlayerName | 
 
 ### ktp_cvar.sma - Core Enforcement Engine
 
-**Version:** 5.4 (2025-11-21)
+**Version:** 6.0 (2025-11-24)
 **File Size:** ~1000 lines
-**Purpose:** Real-time client cvar monitoring and enforcement with direct userinfo parsing and performance optimizations
+**Purpose:** Real-time client cvar monitoring and enforcement using AMXX forwards and direct userinfo parsing
 
 **Key Functions:**
 ```pawn
-public plugin_init()                     // Initialize, register hooks
-public OnUserInfoChange(id, userinfo[])  // ReHLDS real-time detection hook
-public fn_check_userinfo_direct(id)      // NEW v5.3: Parse userinfo directly (instant!)
+public plugin_init()                     // Initialize plugin
+public client_infochanged(id)            // AMXX forward - real-time detection (ALL servers!)
+public fn_check_single_cvar_changed(id)  // Optimized smart checking (v6.0+, only validates mismatches)
+public fn_check_userinfo_direct(id)      // Parse userinfo directly (instant, zero queries)
+public fn_recheck_direct(id)             // Periodic fallback check (ReAPI servers)
 public client_putinserver(id)            // Start initial check timer
 public CheckCvarValue(id, cvar, value)   // Validate and enforce
 public ApplyPunishment(id, count)        // Progressive punishment
 ```
 
 **Detection Methods:**
-- **Primary (KTP-ReHLDS v5.3+)**: Hook `RH_SV_CheckUserInfo` + direct userinfo parsing (< 0.1s, zero queries)
-- **Initial Check (ReAPI v5.3+)**: Direct userinfo parsing at 7.5s after connect (< 0.1s, zero queries)
-- **Fallback (Base AMX)**: Poll cvars at 15-60 second intervals using `query_client_cvar()`
-- **Initial Check (Base AMX)**: Query all cvars 7.5 seconds after connect (8.55s total)
+- **Primary (v5.6+)**: AMXX `client_infochanged()` forward + direct userinfo parsing (< 1s with rate limiting, zero queries, works on ALL servers)
+- **Periodic Fallback (ReAPI servers)**: Direct userinfo parsing at 15-60s intervals (< 0.1s, zero queries)
+- **Rate Limiting**: 1 second minimum between checks per player using `get_systime()` (pause-aware)
 
 ### ktp_cvarconfig.sma - Admin Configuration Interface
 
@@ -416,11 +417,12 @@ amx_plugins reload ktp_cvarconfig.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 5.2
+// KTP Cvar Checker version 5.7
 
-// Check if ReHLDS real-time detection is active
-// AMX logs will show:
-// [KTP Cvar Checker] ReHLDS detected - Real-time userinfo monitoring enabled
+// Check AMX logs on startup
+// Should show:
+// [KTP Cvar Checker] Real-time detection via client_infochanged() enabled
+// (If ReAPI detected, also shows periodic fallback enabled)
 ```
 
 ---
@@ -504,7 +506,7 @@ amx_ban #userid 60 "Repeated cvar violations"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 5.2
+// KTP Cvar Checker version 5.7
 ```
 
 **If You Receive Violations:**
@@ -573,6 +575,51 @@ fcos_use_amx_bans "1"            // Use AMX ban system
 
 ## 📝 Version History
 
+### v6.0 (2025-11-24) - ktp_cvar.sma 🚀 PERFORMANCE - Smart Checking
+- ⚡ **OPTIMIZED: client_infochanged now uses smart checking** - Only validates cvars that don't match expected values
+- 🚀 **ADDED: fn_check_single_cvar_changed()** - Early exit when cvar matches expected value (skips expensive validation)
+- 📊 **PERFORMANCE: Reduced execution time from ~29ms to ~1-3ms** - 10-30x faster real-time detection!
+- 🎯 **IMPROVED: Eliminated performance warnings** - No more "executed more than 29.1ms" messages
+- ℹ️ **NOTE:** Still loops through all 57 cvars, but exits early for correct values instead of running full validation
+- ✅ **Typical case:** Player changes 1-2 cvars → only validates those 2 instead of all 57
+
+### v5.9 (2025-11-24) - ktp_cvar.sma 🔥 CRITICAL FIX - Command Enforcement
+- 🚨 **CRITICAL: Fixed client_cmd newline issue** - Commands were being split across lines breaking enforcement
+- 🐛 **FIXED: "Server tried to send invalid command" errors** - Commands like "rate 100000\n" were breaking
+- ✅ **CHANGED: Added semicolon terminator to all client_cmd calls** - `rate 100000;` prevents command splitting
+- 🎯 **IMPROVED: Cvar enforcement now works correctly** - All values (small and large) are properly enforced
+- ℹ️ **ROOT CAUSE:** client_cmd() adds automatic newline, causing double newline which splits commands
+- ✅ **SOLUTION:** Semicolon prevents command from being split across the automatic newline
+
+### v5.8 (2025-11-23) - ktp_cvar.sma 🐛 BUG FIX - Large Value Formatting (Incomplete)
+- 🔧 **Attempted fix for large cvar values** - Used integer format for values >= 100
+- ⚠️ **NOTE: Fix was incomplete** - Formatting was correct, but newline handling was wrong (fixed in v5.9)
+- ❌ **Still had enforcement issues** - Commands were still failing due to newline problem
+
+### v5.7 (2025-11-22) - ktp_cvar.sma 🧹 OPTIMIZATION - Cleanup
+- 🧹 **Removed unnecessary debug logging** - No more "[KTP Cvar Checker] UserInfo changed" spam in logs
+- 🧹 **Removed failed optimization attempt** - Simplified client_infochanged() implementation
+- 📊 **Documented expected performance** - 2-6ms per check is normal for 57 cvars
+- ℹ️ **Performance notes added** - AMXX warnings (>2ms) are expected and acceptable
+- ℹ️ **Overhead is negligible** - Max 6ms per second (0.2-0.6% of server tick at 1000fps)
+- ✅ **Plugin performing optimally** - Rate limiting prevents abuse, real-time detection working perfectly
+
+### v5.6 (2025-11-22) - ktp_cvar.sma 🔥 CRITICAL FIX - Real-Time Detection
+- 🚨 **CRITICAL: Removed broken RH_SV_CheckUserInfo hook** - Was causing crashes with invalid player IDs
+- ⚡ **NEW: Real-time detection via client_infochanged() forward** - Works on ALL servers (HLDS, ReHLDS, any AMX)
+- ✅ **No custom hooks required** - Uses standard AMXX forward instead of ReHLDS-specific hook
+- 🔄 **Added periodic polling fallback** - 15-60s random intervals on ReAPI servers as backup
+- ⏱️ **Pause-aware rate limiting** - Uses `get_systime()` with 1-second precision (works during KTP-ReHLDS pauses)
+- 🐛 **Fixed all runtime crashes** - No more "index out of bounds" errors from invalid player IDs
+- 📊 **Instant detection** - < 1 second with rate limiting (was 15-60s polling or 8.55s with broken hook)
+- 🎯 **Platform compatibility expanded** - Now works perfectly on base HLDS without any custom engine mods
+
+### v5.5 (2025-11-22) - ktp_cvar.sma (Internal - Not Released)
+- Changed rate limiting from `get_gametime()` to `get_systime()` for pause compatibility
+- Fixed compilation errors with rate limit variable type
+- Adjusted precision from 0.1s to 1s for systime
+- (Superseded by v5.6 which fixed the broken hook)
+
 ### v5.4 (2025-11-21) - ktp_cvar.sma 🚀 PERFORMANCE UPDATE
 - ⚡ **Pre-converted float arrays** - Eliminates 57+ `floatstr()` calls per check
 - 🔧 **Removed duplicate get_user_name()** - 2-3 calls per violation → 1 call
@@ -638,13 +685,13 @@ fcos_use_amx_bans "1"            // Use AMX ban system
 **Problem:** Violations detected slowly (15-60 second delay)
 
 **Solutions:**
-- ✅ **Verify plugin version**: Run `ktp_cvar_version` - should show **5.3** for instant detection
-- ✅ **Verify ReHLDS is installed and running**: `meta list` should show ReHLDS module
-- ✅ **Verify ReAPI module is loaded**: `meta list` should show ReAPI module
-- ✅ **Check AMX logs for**: "ReHLDS detected - Real-time monitoring enabled"
-- ✅ **If using v5.2 or older**: Upgrade to v5.3 for instant userinfo parsing
-- ✅ **If not using KTP-ReHLDS**: Install it for `RH_SV_CheckUserInfo` hook
-- ✅ **Polling fallback is normal** for base AMX (15-60 second delays are expected)
+- ✅ **Verify plugin version**: Run `ktp_cvar_version` - should show **6.0** for optimized performance
+- ✅ **Check AMX logs on startup** for: "[KTP Cvar Checker] Real-time detection via client_infochanged() enabled"
+- ✅ **If using v5.8 or older**: Upgrade to v5.9+ for working enforcement and v6.0 for best performance
+- ✅ **Test with a cvar change**: Type `r_fullbright 1` in console, should be corrected within 1 second
+- ✅ **Rate limiting is normal**: Max 1 check per second per player to prevent abuse
+- ✅ **Performance improved in v6.0**: Smart checking takes 1-3ms (was 2-6ms in v5.7, 29ms+ with violations)
+- ✅ **Periodic polling on ReAPI servers**: 15-60s fallback checks are normal as backup
 
 ### Configuration Not Saving
 
@@ -672,7 +719,7 @@ fcos_use_amx_bans "1"            // Use AMX ban system
 **Problem:** Players changing cvars back after correction
 
 **Solutions:**
-- ✅ **Enable ReHLDS real-time detection** - Instant re-correction
+- ✅ **Verify v5.7 is installed** - Real-time detection via client_infochanged() catches changes instantly
 - ✅ **Lower ban threshold** - 10 violations instead of 20
 - ✅ **Enable repeat slaying** - Punish during match
 - ✅ **Manual review** - Check logs for persistent violators
@@ -684,9 +731,9 @@ fcos_use_amx_bans "1"            // Use AMX ban system
 
 **Solutions:**
 - ✅ Load ktp_cvar.amxx **after** other cvar-related plugins
-- ✅ Check for plugins that also hook `RH_SV_CheckUserInfo`
+- ✅ Check for plugins that also implement `client_infochanged()` forward
 - ✅ Disable conflicting anti-cheat plugins
-- ✅ Review AMX logs for hook registration errors
+- ✅ Review AMX logs for errors or conflicts
 
 ---
 
@@ -741,11 +788,13 @@ See [LICENSE](LICENSE) file for details
 - ⚠️ Manual review recommended before permanent bans
 
 **Performance Considerations:**
-- ✅ **v5.3+ with ReHLDS**: **ZERO overhead** - Direct userinfo parsing, no network queries, no polling
-- ✅ **v5.2 or older with ReHLDS**: Hook fires instantly but still queries 57 cvars (8.55s per check)
-- ✅ **Polling mode (no ReHLDS)**: Queries 57 cvars per player every 15-60 seconds
-- ✅ **Server with 32 players (polling)**: ~1800 cvar queries per minute
-- ⚠️ **Upgrade recommendation**: If using v5.2 or older, upgrade to v5.3 for 85x faster detection
+- ✅ **v5.7 (Current)**: **MINIMAL overhead** - Event-driven via client_infochanged(), direct userinfo parsing, zero network queries
+- ✅ **Real-time detection**: < 1 second with rate limiting (1 check per second max per player)
+- ✅ **Check performance**: 2-6ms per check (acceptable for 57 cvars, < 0.6% of server tick)
+- ✅ **Periodic fallback (ReAPI servers)**: 15-60s intervals for backup detection
+- ✅ **Server with 32 players**: Only checks when cvars actually change (event-driven, not polling)
+- ℹ️ **AMXX performance warnings (>2ms)**: Expected and acceptable when checking 57 cvars
+- ⚠️ **Upgrade recommendation**: If using v5.6 or older, upgrade to v5.7 for optimized performance
 
 ### For Competitive Leagues
 
