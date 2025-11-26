@@ -2,10 +2,16 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   6.0
+ *   Current Version:   6.1
  *   Release Date:      2025-11-24
  *
  *   Changelog:
+ *   6.1 2025-11-24 - CRITICAL FIX: Use engclient_cmd instead of client_cmd for enforcement
+ *                    * FIXED: Switched from client_cmd to engclient_cmd for cvar enforcement
+ *                    * FIXED: client_cmd was adding newlines inside command string causing "invalid command" errors
+ *                    + CHANGED: Now using formatex + engclient_cmd (simulates console input, no newlines)
+ *                    + IMPROVED: Cvar enforcement finally working correctly
+ *                    - NOTE: v5.9 semicolon approach didn't work - engclient_cmd is the correct solution
  *   6.0 2025-11-24 - PERFORMANCE: Optimized client_infochanged to check only changed cvars
  *                    * OPTIMIZED: client_infochanged now uses smart checking instead of checking all 57 cvars
  *                    + ADDED: fn_check_single_cvar_changed() - only validates cvars that don't match expected values
@@ -93,7 +99,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "6.0";
+new const gs_VERSION[] = "6.1";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 // ============================================================================
@@ -771,22 +777,28 @@ public fn_fcoslogshow(id, const s_CVARNAME[], Float: valueFromPlayer, Float: cal
 	new bool:is_pitch = equal(s_CVARNAME, gs_pitch)
 
 	// Force correct cvar value on client
-	// Use integer format for large values to avoid formatting issues
-	// NOTE: client_cmd() adds a newline automatically, so we use semicolons to separate commands
+	// Use engclient_cmd instead of client_cmd to avoid newline issues
+	// engclient_cmd sends commands as if typed in console (no automatic newline)
+	new cmd[128]
+
 	if (is_pitch && (valueFromPlayer < 0.0)) {
-		client_cmd(id, "%s -0.022;", s_CVARNAME)
+		formatex(cmd, charsmax(cmd), "%s -0.022", s_CVARNAME)
+		engclient_cmd(id, cmd)
 	}
 	else if (is_pitch && (valueFromPlayer >= 0.0)) {
-		client_cmd(id, "%s 0.022;", s_CVARNAME)
+		formatex(cmd, charsmax(cmd), "%s 0.022", s_CVARNAME)
+		engclient_cmd(id, cmd)
 	}
 	else if (calFloatValue >= 100.0) {
 		// For large values (like rate: 100000), use integer format to avoid truncation
 		new intValue = floatround(calFloatValue, floatround_floor)
-		client_cmd(id, "%s %d;", s_CVARNAME, intValue)
+		formatex(cmd, charsmax(cmd), "%s %d", s_CVARNAME, intValue)
+		engclient_cmd(id, cmd)
 	}
 	else {
 		// For small values, use float format with 3 decimals
-		client_cmd(id, "%s %.3f;", s_CVARNAME, calFloatValue)
+		formatex(cmd, charsmax(cmd), "%s %.3f", s_CVARNAME, calFloatValue)
+		engclient_cmd(id, cmd)
 	}
 
 	// Get player info
