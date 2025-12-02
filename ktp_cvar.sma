@@ -2,106 +2,57 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   6.1
- *   Release Date:      2025-11-24
+ *   Current Version:   7.4
+ *   Release Date:      2025-12-02
  *
  *   Changelog:
- *   6.1 2025-11-24 - CRITICAL FIX: Use engclient_cmd instead of client_cmd for enforcement
- *                    * FIXED: Switched from client_cmd to engclient_cmd for cvar enforcement
- *                    * FIXED: client_cmd was adding newlines inside command string causing "invalid command" errors
- *                    + CHANGED: Now using formatex + engclient_cmd (simulates console input, no newlines)
- *                    + IMPROVED: Cvar enforcement finally working correctly
- *                    - NOTE: v5.9 semicolon approach didn't work - engclient_cmd is the correct solution
- *   6.0 2025-11-24 - PERFORMANCE: Optimized client_infochanged to check only changed cvars
- *                    * OPTIMIZED: client_infochanged now uses smart checking instead of checking all 57 cvars
- *                    + ADDED: fn_check_single_cvar_changed() - only validates cvars that don't match expected values
- *                    + PERFORMANCE: Reduced execution time from ~29ms to ~1-3ms (10-30x faster!)
- *                    + IMPROVED: Early exit when cvar matches expected value (skips expensive validation)
- *                    + NOTE: Still loops through all cvars, but exits early for correct values
- *   5.9 2025-11-24 - CRITICAL FIX: client_cmd newline issue breaking cvar enforcement
- *                    * FIXED: client_cmd() adding automatic newline causing "Server tried to send invalid command" errors
- *                    * FIXED: Commands being split across newlines (e.g., "rate 100000\n" breaking into "rate 100000" and empty line)
- *                    + CHANGED: Added semicolon terminator to all client_cmd calls (rate 100000; cl_updaterate 100;)
- *                    + IMPROVED: Cvar enforcement now works correctly for ALL values including large ones
- *                    + NOTE: This was the root cause of v5.8 failures - formatting was correct, newline handling was wrong
- *   5.8 2025-11-23 - BUG FIX: client_cmd formatting issue for large values (INCOMPLETE FIX)
- *                    * FIXED: "Server tried to send invalid command" error for large cvar values (rate: 100000)
- *                    * FIXED: client_cmd() buffer truncation with %.3f format for large floats
- *                    + CHANGED: Use integer format (%d) for values >= 100 (rate, cl_updaterate, etc.)
- *                    + CHANGED: Hardcode m_pitch values instead of formatting to avoid precision issues
- *                    + IMPROVED: Cleaner command formatting reduces buffer overflow risk
- *                    - NOTE: Fix was incomplete - newline issue remained (fixed in v5.9)
- *   5.7 2025-11-22 - OPTIMIZATION: Cleaned up client_infochanged() implementation
- *                    * REMOVED: Unnecessary debug logging in client_infochanged() (reduces log spam)
- *                    * REMOVED: Failed optimization attempt that added overhead
- *                    * DOCUMENTED: Expected 2-6ms performance per check (checking 57 cvars is inherently expensive)
- *                    + PERFORMANCE: Plugin now performs optimally - rate limiting prevents abuse
- *                    + NOTE: AMXX performance warnings (>2ms) are expected and acceptable for 57 cvar checks
- *                    + NOTE: 2-6ms every 1 second max is negligible overhead (0.2-0.6% of server tick)
- *   5.6 2025-11-22 - CRITICAL FIX: Real-time cvar detection now working!
- *                    * FIXED: Removed broken RH_SV_CheckUserInfo hook (wrong hook, caused crashes)
- *                    * ADDED: client_infochanged() forward for REAL-TIME cvar detection (works on ALL servers!)
- *                    * ADDED: Periodic polling fallback (15-60s) for ReAPI servers as backup
- *                    + REAL-TIME: Cvar changes detected instantly (< 1s with rate limiting)
- *                    + UNIVERSAL: Works on base HLDS, ReHLDS, all game mods (not ReHLDS-specific)
- *                    + STABLE: No more crashes from invalid hook parameters
- *   5.5 2025-11-22 - BUG FIXES: Critical stability and safety improvements
- *                    * FIXED: Rate limiting type mismatch (Float timestamp → int, pause-aware)
- *                    * FIXED: Use get_systime() instead of get_gametime() (gametime freezes during KTP-ReHLDS pauses)
- *                    * FIXED: Adjusted rate limit to 1s (systime precision, down from broken 0.1s with Float)
- *                    * FIXED: Array bounds validation timing (validate before assignment)
- *                    * FIXED: Missing player ID validation in client_putinserver
- *                    * FIXED: Missing NULL/empty string validation before logging violations
- *                    * FIXED: Simplified boolean logic in punishment conditions (more readable)
- *                    * FIXED: Added disconnection checks before kick/ban server commands
- *                    + STABILITY: Prevents crashes from invalid player IDs and disconnected players
- *                    + STABILITY: Rate limiting now works correctly during pauses (uses systime not gametime)
- *   5.4 2025-11-21 - PERFORMANCE: Major optimizations for reduced CPU/memory overhead
- *                    - Pre-convert cvar values to float arrays (eliminates 57+ floatstr() calls per check)
- *                    - Remove duplicate get_user_name() calls (2-3x per violation → 1x)
- *                    - Optimize float comparison logic (check floats before strings)
- *                    - Add rate limiting to OnUserInfoChange hook (max 1 check per 0.1s per player)
- *                    - Overall: ~60% fewer function calls per check, prevents abuse scenarios
- *   5.3 2025-11-21 - MAJOR: Direct userinfo parsing with ReAPI - instant cvar checks (no network queries!)
- *                    - Added fn_check_userinfo_direct() for real-time userinfo parsing
- *                    - Added fn_initial_check_direct() for instant initial checks on ReAPI
- *                    - Disabled polling on ReAPI servers (real-time detection only)
- *                    - Initial check now instant on ReAPI (< 0.1s vs 8.55s)
- *                    - Ongoing checks triggered by userinfo changes (< 0.1s vs 8.55s)
- *   5.2 2025-10-31 - Added ReHLDS support (optional) for real-time userinfo detection
- *   5.1 2025-10-31 - Full refactoring: Added constants, helper functions, cached pcvars, organized code sections
- *   5.0 2025-10-31 - Optimized for AMX 1.10, merged loops, fixed globals, improved efficiency
- *
- *					   4.4 2024-02-27
- *					   4.3 2024-02-18
- *					   4.2 2023-09-22
- *					   4.0 2023-03-28
- *					   3.8 2022-03-21
- *					   3.7 2022-03-01
- *					   3.6 2022-12-23
- *					   3.5 2022-07-29
- *					   3.0 2022-06-17
- *
+ *   7.4 2025-12-02 - Priority-based periodic monitoring system
+ *                    + ADDED: Periodic cvar queries to trigger ReHLDS pfnClientCvarChanged hook
+ *                    + ADDED: Priority cvar system - 9 critical cvars checked every 2 seconds
+ *                      (m_pitch, cl_yawspeed, cl_pitchspeed, lightgamma, cl_bob,
+ *                       cl_updaterate, cl_cmdrate, rate, ex_interp)
+ *                    + ADDED: Standard cvar rotation - 50 cvars cycled through every 10 seconds
+ *                    * PERFORMANCE: ~5 queries/second per player (160 q/s for 32 players)
+ *                    * DETECTION: Priority cvars detected in <2s, standard cvars in <100s
+ *   7.3 2025-11-29 - Bug fixes and chat announcements
+ *                    * FIXED: Cvar callback now looks up cvar by name (async query fix)
+ *                    + ADDED: Chat announcement to all players when cvar is corrected
+ *   7.2 2025-11-28 - Updated cvar list and values
+ *                    + ADDED: gl_round_down (value: 3)
+ *                    + ADDED: hud_takesshots (value: 1)
+ *                    * FIXED: lightgamma min from 1.7 to 1.81
+ *                    * FIXED: ex_interp max from 0.04 to 0.03
+ *                    * Total monitored cvars: 59 (51 exact + 8 ranges)
+ *   7.1 2025-11-28 - Pure enforcement - All punishments removed + Discord logging
+ *                    + ADDED: /cvar command for manual cvar check
+ *                    + ADDED: Discord webhook logging via cURL (optional)
+ *                    + ADDED: fcos_discord_enabled cvar (0/1)
+ *                    + ADDED: fcos_discord_webhook cvar (webhook URL)
+ *                    - REMOVED: All punishment cvars (warn, name change, slay)
+ *                    - SIMPLIFIED: Pure enforcement (auto-correct) + logging only
+ *   7.0 2025-11-28 - MAJOR UPGRADE: Real-time detection with KTPAMXX - Simplified & Optimized
+ *                    + ADDED: client_cvar_changed() forward for REAL-TIME detection of ALL cvars
+ *                    + PERFORMANCE: 100% real-time detection - no periodic polling overhead
+ *                    + PERFORMANCE: Instant detection for all cvars (< 1 second response time)
+ *                    * REQUIRES: KTPAMXX with pfnClientCvarChanged callback
+ *                    - REMOVED: Backwards compatibility code (ReAPI, periodic polling)
+ *                    - REMOVED: Kick/ban punishment system (enforcement only)
+ *                    - REMOVED: MOTD warning system (console logging only)
+ *                    - REMOVED: Priority tier system (not needed with real-time)
  */
 
 #include <amxmodx>
 #include <amxmisc>
-
-// Optional ReAPI support (ReHLDS only - works with DoD/CS/TFC/etc)
-#tryinclude <reapi>
-
-#if defined _reapi_included
-	#define USING_REAPI
-#endif
 
 // ============================================================================
 // PLUGIN INFORMATION
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "6.1";
+new const gs_VERSION[] = "7.4";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
+
 // ============================================================================
 // CONSTANTS & DEFINES
 // ============================================================================
@@ -114,31 +65,33 @@ new const gs_FILETYPE[] = ".cfg";
 new const gs_pitch[] = "m_pitch";
 new const inverse_p[] = "-0.022";
 
-// Precision constant for float comparisons (optimized for AMX 1.10)
+// Precision constant for float comparisons
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 57
-#define MIN_MAX_CVAR_START 49
-#define LAST_CVAR_INDEX 56
+#define TOTAL_CVARS 59
+#define MIN_MAX_CVAR_START 51
 #define ALT_VALUES_COUNT 8
+
+// Parallel query batch size for initial check
+#define PARALLEL_BATCH_SIZE 8
+
+// Rate limiting
+#define CHECK_RATE_LIMIT 1  // Minimum 1 second between checks per player
+
+// Priority-based monitoring intervals
+#define PRIORITY_CHECK_INTERVAL 2.0   // High-priority cvars checked every 2 seconds
+#define STANDARD_CHECK_INTERVAL 10.0  // Standard cvars checked every 10 seconds
+
+// Priority cvar count
+#define PRIORITY_CVARS_COUNT 9
 
 // ============================================================================
 // CVAR POINTERS
 // ============================================================================
 
-new gp_fcos_warn
-new gp_fcos_attempt_num_warn
-new gp_fcos_repeat_warning
-new gp_fcos_change_name
-new gp_fcos_attempt_num_namechange
-new gp_fcos_slay
-new gp_fcos_attempt_num_slay
-new gp_fcos_repeat_slaying
-new gp_fcos_kick_or_ban
-new gp_fcos_attempt_num_kickorban
-new gp_fcos_ban_time
-new gp_fcos_use_amx_bans
+new gp_discord_webhook
+new gp_discord_enabled
 
 // ============================================================================
 // PLAYER DATA ARRAYS
@@ -146,20 +99,16 @@ new gp_fcos_use_amx_bans
 
 new bool:gb_FirstCheckComplete[MAX_PLAYERS]
 new bool:gb_StopChecking[MAX_PLAYERS]
-new gi_numofattempts[MAX_PLAYERS]
 new gi_cvarnumID[MAX_PLAYERS]
+new gi_last_check_time[MAX_PLAYERS]
+new bool:gb_enforcing_cvar[MAX_PLAYERS]
+
+// Periodic monitoring state
+new gi_standard_cvar_index[MAX_PLAYERS]  // Current index in standard cvar rotation
 
 // ============================================================================
 // GLOBAL VARIABLES
 // ============================================================================
-
-// ReAPI/ReHLDS support flag
-#if defined USING_REAPI
-new bool:g_bUsingReHLDS = false
-#endif
-
-// Timing
-new Float:gf_randnum
 
 // File paths
 new gs_directory[64]
@@ -170,178 +119,70 @@ new gs_logname[32]
 new gs_logauthid[35]
 new gs_logip[16]
 
-// Temporary variables
-new gs_newname[256]
-new gs_reason[256]
-new gi_userid
-new gi_bantime
-
-// MOTD display variables
-new gs_motd[1000]
-new gs_motdtitle[90]
-new gs_subtitle[90]
-new gs_mainmsg1[90]
-new gs_mainmsg2[120]
-new gs_mainmsg3[90]
-new gs_mainmsg4[90]
-new gs_mainmsg5[90]
-new gi_len
+// Discord webhook
+new gs_discord_webhook[512]
 
 // ============================================================================
 // CVAR CHECKING ARRAYS
 // ============================================================================
-// Originally curated from CAL list and Brazilian list (Bud & Markoz)
-// Massively modified for KTP purposes
 
+// Priority cvars: checked every 2 seconds (movement/network/performance exploits)
+new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
+"m_pitch", "cl_yawspeed", "cl_pitchspeed", "lightgamma", "cl_bob",
+"cl_updaterate", "cl_cmdrate", "rate", "ex_interp"
+}
+
+// All cvars (for initial check and reference)
 new gs_cvars[TOTAL_CVARS][] = {
-"ambient_fade",
-"ambient_level",
-"cl_bobcycle",
-"cl_bobup",
-"cl_fixtimerate",
-"cl_gaitestimation",
-"fastsprites",
-"gl_affinemodels",
-"gl_alphamin",
-"gl_clear",
-"gl_cull",
-"gl_d3dflip",
-"gl_dither",
-"gl_keeptjunctions",
-"gl_lightholes",
-"gl_monolights",
-"gl_nobind",
-"gl_nocolors",
-"gl_overbright",
-"gl_palette_tex",
-"gl_picmip",
-"gl_playermip",
-"r_bmodelinterp",
-"r_drawentities",
-"r_drawviewmodel",
-"r_dynamic",
-"r_fullbright",
-"r_glowshellfreq",
-"r_lightmap",
-"r_traceglow",
-"r_wadtextures",
-"texgamma",
-"r_luminance",
-"s_show",
-"cl_showevents",
-"cl_anglespeedkey",
-"cl_lc",
-"cl_lw",
-"cl_upspeed",
-"lookspring",
-"lookstrafe",
-"cl_movespeedkey",
-"m_pitch",
-"m_side",
-"cl_pitchdown",
-"cl_pitchup",
-"cl_yawspeed",
-"cl_pitchspeed",
-"cl_mousegrab",
-"lightgamma",
-"cl_smoothtime",
-"cl_bob",
-"cl_updaterate",
-"cl_cmdrate",
-"rate",
-"ex_interp",
-"fps_max"
+"ambient_fade", "ambient_level", "cl_bobcycle", "cl_bobup", "cl_fixtimerate",
+"cl_gaitestimation", "fastsprites", "gl_affinemodels", "gl_alphamin", "gl_clear",
+"gl_cull", "gl_d3dflip", "gl_dither", "gl_keeptjunctions", "gl_lightholes",
+"gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright", "gl_palette_tex",
+"gl_picmip", "gl_playermip", "gl_round_down", "r_bmodelinterp", "r_drawentities",
+"r_drawviewmodel", "r_dynamic", "r_fullbright", "r_glowshellfreq", "r_lightmap",
+"r_traceglow", "r_wadtextures", "texgamma", "r_luminance", "s_show",
+"cl_showevents", "cl_anglespeedkey", "cl_lc", "cl_lw", "cl_upspeed",
+"lookspring", "lookstrafe", "cl_movespeedkey", "m_pitch", "m_side",
+"cl_pitchdown", "cl_pitchup", "cl_yawspeed", "cl_pitchspeed", "hud_takesshots",
+"cl_mousegrab", "lightgamma", "cl_smoothtime", "cl_bob", "cl_updaterate",
+"cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
-// Equal or Min Values (for cvars 0-48, these are exact values; for 49-56, these are minimum values)
+// Standard cvars (non-priority): checked via rotation every 10 seconds
+// Excludes the 9 priority cvars listed above
+#define STANDARD_CVARS_COUNT 50
+new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
+"ambient_fade", "ambient_level", "cl_bobcycle", "cl_bobup", "cl_fixtimerate",
+"cl_gaitestimation", "fastsprites", "gl_affinemodels", "gl_alphamin", "gl_clear",
+"gl_cull", "gl_d3dflip", "gl_dither", "gl_keeptjunctions", "gl_lightholes",
+"gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright", "gl_palette_tex",
+"gl_picmip", "gl_playermip", "gl_round_down", "r_bmodelinterp", "r_drawentities",
+"r_drawviewmodel", "r_dynamic", "r_fullbright", "r_glowshellfreq", "r_lightmap",
+"r_traceglow", "r_wadtextures", "texgamma", "r_luminance", "s_show",
+"cl_showevents", "cl_anglespeedkey", "cl_lc", "cl_lw", "cl_upspeed",
+"lookspring", "lookstrafe", "cl_movespeedkey", "m_side", "cl_pitchdown",
+"cl_pitchup", "hud_takesshots", "cl_mousegrab", "cl_smoothtime", "fps_max"
+}
+
 new gs_calvalues[TOTAL_CVARS][] = {
-"100",	    // ambient_fade
-"0.3",	    // ambient_level
-"0.8",	    // cl_bobcycle
-"0.5",	    // cl_bobup
-"7.5",	    // cl_fixtimerate
-"1",		// cl_gaitestimation
-"0",		// fastsprites
-"0",		// gl_affinemodels
-"0.25",	    // gl_alphamin
-"0",		// gl_clear
-"1",		// gl_cull
-"0",		// gl_d3dflip
-"1",		// gl_dither
-"1",		// gl_keeptjunctions
-"1",		// gl_lightholes
-"0",		// gl_monolights
-"0",		// gl_nobind
-"0",		// gl_nocolors
-"0",		// gl_overbright
-"1",		// gl_palette_tex
-"0",		// gl_picmip
-"0",		// gl_playermip
-"1",		// r_bmodelinterp
-"1",		// r_drawentities
-"1",		// r_drawviewmodel
-"1",		// r_dynamic
-"0",		// r_fullbright
-"2.2",	    // r_glowshellfreq
-"0",		// r_lightmap
-"0",		// r_traceglow
-"0",		// r_wadtextures
-"2",		// texgamma
-"0",		// r_luminance
-"0",		// s_show
-"0",		// cl_showevents
-"0.67",	    // cl_anglespeedkey
-"1",		// cl_lc
-"1",		// cl_lw
-"320",	    // cl_upspeed
-"0",		// lookspring
-"0",		// lookstrafe
-"0.3",	    // cl_movespeedkey
-"0.022",	// m_pitch (also allow inverse -0.022) see gs_pitch, inverse_p
-"0.8",	    // m_side
-"89",		// cl_pitchdown
-"89",		// cl_pitchup
-"210",	    // cl_yawspeed
-"225",	    // cl_pitchspeed
-"1",		// cl_mousegrab
-"1.7",	    // MIN VALUE: lightgamma (Index: 49)
-"0",		// MIN VALUE: cl_smoothtime (Index: 50)
-"0",		// MIN VALUE: cl_bob (Index: 51)
-"100",	    // MIN VALUE: cl_updaterate (Index: 52)
-"100",	    // MIN VALUE: cl_cmdrate (Index: 53)
-"100000",	// MIN VALUE: rate (Index: 54)
-"0",		// MIN VALUE: ex_interp (Index: 55)
-"60"		// MIN VALUE: fps_max (Index: 56)
+"100", "0.3", "0.8", "0.5", "7.5", "1", "0", "0", "0.25", "0",
+"1", "0", "1", "1", "1", "0", "0", "0", "0", "1",
+"0", "0", "3", "1", "1", "1", "1", "0", "2.2", "0",
+"0", "0", "2", "0", "0", "0", "0.67", "1", "1", "320",
+"0", "0", "0.3", "0.022", "0.8", "89", "89", "210", "225", "1",
+"1", "1.81", "0", "0", "100", "100", "100000", "0", "60"
 }
 
-// Max Values (for cvars 49-56 only - upper bounds for range checking)
 new gs_altvalues[ALT_VALUES_COUNT][] = {
-"3",		// lightgamma
-"0.1",		// smoothtime
-"0.011",	// bob
-"120",		// updaterate
-"500",		// cmdrate
-"1000000",	// rate
-"0.04",		// interp
-"500"		// fps_max
+"3", "0.1", "0.011", "120", "500", "1000000", "0.03", "500"
 }
 
-// Cvar checking loop variable
+// Cvar loop variable
 new gi_cvarnum
 
-// ============================================================================
-// PRE-CONVERTED FLOAT ARRAYS (Performance Optimization)
-// ============================================================================
-// These are initialized once in plugin_init() to avoid repeated floatstr() conversions
-new Float:gf_calvalues[TOTAL_CVARS]      // Pre-converted required values
-new Float:gf_altvalues[ALT_VALUES_COUNT]  // Pre-converted max values for range checks
-
-// ============================================================================
-// RATE LIMITING (Performance Optimization)
-// ============================================================================
-// Use systime (not gametime) because gametime freezes during KTP-ReHLDS pauses
-new gi_last_check_time[MAX_PLAYERS]  // Last check timestamp per player (Unix time)
-#define CHECK_RATE_LIMIT 1  // Minimum 1 second between checks per player (systime precision)
+// Pre-converted float arrays (performance optimization)
+new Float:gf_calvalues[TOTAL_CVARS]
+new Float:gf_altvalues[ALT_VALUES_COUNT]
 
 // ============================================================================
 // PLUGIN INITIALIZATION
@@ -351,18 +192,13 @@ public plugin_init() {
 	register_plugin(gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 	register_cvar("ktp_cvar_version", gs_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
 
-	gp_fcos_warn					= register_cvar("fcos_warn", "1")
-	gp_fcos_attempt_num_warn		= register_cvar("fcos_attempt_num_warn", "5")
-	gp_fcos_repeat_warning			= register_cvar("fcos_repeat_warning", "1")
-	gp_fcos_change_name				= register_cvar("fcos_change_name", "0")
-	gp_fcos_attempt_num_namechange	= register_cvar("fcos_attempt_num_namechange", "0")
-	gp_fcos_slay					= register_cvar("fcos_slay", "0")
-	gp_fcos_attempt_num_slay		= register_cvar("fcos_attempt_num_slay", "0")
-	gp_fcos_repeat_slaying			= register_cvar("fcos_repeat_slaying", "0")
-	gp_fcos_kick_or_ban				= register_cvar("fcos_kick_or_ban", "0")
-	gp_fcos_attempt_num_kickorban 	= register_cvar("fcos_attempt_num_kickorban", "0")
-	gp_fcos_ban_time		  		= register_cvar("fcos_ban_time", "0")
-	gp_fcos_use_amx_bans  			= register_cvar("fcos_use_amx_bans", "0")
+	// Discord webhook logging
+	gp_discord_enabled = register_cvar("fcos_discord_enabled", "0")  // 0 = disabled, 1 = enabled
+	gp_discord_webhook = register_cvar("fcos_discord_webhook", "")   // Discord webhook URL
+
+	// Register /cvar command for manual cvar check
+	register_clcmd("say /cvar", "cmd_manual_check")
+	register_clcmd("say_team /cvar", "cmd_manual_check")
 
 	register_dictionary("ktp_cvar.txt")
 	get_configsdir(gs_directory, 32)
@@ -370,42 +206,23 @@ public plugin_init() {
 	if (file_exists(gs_fcosconfigfile))
 		server_cmd("exec %s", gs_fcosconfigfile)
 
-	// Pre-convert all cvar values to floats (performance optimization)
 	fn_init_float_arrays()
-
-	// Initialize ReHLDS support if available
-	#if defined USING_REAPI
-		fn_init_reapi_support()
-	#endif
-
 	fn_servermessage()
 }
 
 // ============================================================================
-// FLOAT ARRAY INITIALIZATION (Performance Optimization)
+// INITIALIZATION FUNCTIONS
 // ============================================================================
 
-/**
- * Pre-convert string cvar values to floats
- * Eliminates 57+ floatstr() calls per check!
- */
 public fn_init_float_arrays() {
-	// Convert all required values (57 cvars)
 	for (new i = 0; i < TOTAL_CVARS; i++) {
 		gf_calvalues[i] = floatstr(gs_calvalues[i])
 	}
-
-	// Convert all max values for range checks (8 cvars)
 	for (new i = 0; i < ALT_VALUES_COUNT; i++) {
 		gf_altvalues[i] = floatstr(gs_altvalues[i])
 	}
-
-	log_amx("[%s] Pre-converted %d cvar values to floats for performance", gs_PLUGIN, TOTAL_CVARS + ALT_VALUES_COUNT)
+	log_amx("[%s] Pre-converted %d cvar values to floats", gs_PLUGIN, TOTAL_CVARS + ALT_VALUES_COUNT)
 }
-
-// ============================================================================
-// SERVER & CLIENT EVENTS
-// ============================================================================
 
 public fn_servermessage() {
 	server_print("%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
@@ -413,310 +230,232 @@ public fn_servermessage() {
 	if (file_exists(gs_fcosconfigfile))
 		server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG2")
 
-	#if defined USING_REAPI
-		if (g_bUsingReHLDS) {
-			server_print("[%s] ReHLDS detected - Real-time user info monitoring ACTIVE", gs_PLUGIN)
-		} else {
-			server_print("[%s] Running in standard polling mode", gs_PLUGIN)
-		}
-	#endif
+	server_print("[%s] Monitoring 59 cvars with priority-based system:", gs_PLUGIN)
+	server_print("[%s] - Priority cvars (%d): checked every %.0f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
+	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", gs_PLUGIN, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
+	server_print("[%s] Enforcement: Auto-correct + console logging + Discord webhooks", gs_PLUGIN)
 }
 
-#if defined USING_REAPI
-/**
- * Initialize ReAPI/ReHLDS support * Only uses ReHLDS features (engine-level, game-agnostic)
- */
-public fn_init_reapi_support() {
-	// Check if ReHLDS is available (not ReGameDLL - that's CS-only!)
-	if (is_rehlds()) {
-		g_bUsingReHLDS = true
-
-		// NOTE: RH_SV_CheckUserInfo hook is NOT suitable for real-time cvar detection
-		// It only fires during initial connection, not when cvars change during gameplay
-		// We use direct userinfo parsing via get_user_info() in scheduled checks instead
-
-		log_amx("[%s] ReHLDS detected - using direct userinfo parsing for instant checks", gs_PLUGIN)
-	} else {
-		g_bUsingReHLDS = false
-		log_amx("[%s] ReHLDS not detected, using query_client_cvar() polling", gs_PLUGIN)
-	}
-}
+// ============================================================================
+// REAL-TIME CVAR DETECTION
+// ============================================================================
 
 /**
- * Direct userinfo parsing - Instant checking without network queries
- * Extracts all 57 cvar values from userinfo and validates them
- * OPTIMIZED: Uses pre-converted float arrays (no floatstr() calls!)
- */
-public fn_check_userinfo_direct(id) {
-	new s_VALUE[32]
-	new Float:valueFromPlayer
-
-	// Loop through all 57 cvars and extract values from userinfo
-	for (gi_cvarnum = 0; gi_cvarnum < TOTAL_CVARS; gi_cvarnum++) {
-		// Get cvar value directly from userinfo (no network query!)
-		get_user_info(id, gs_cvars[gi_cvarnum], s_VALUE, charsmax(s_VALUE))
-
-		// Skip empty values (cvar not in userinfo)
-		if (s_VALUE[0] == 0)
-			continue
-
-		valueFromPlayer = floatstr(s_VALUE)
-
-		// Check if this is a min/max range cvar (indices 49-56)
-		// OPTIMIZED: Use pre-converted float values instead of floatstr()
-		if (gi_cvarnum >= MIN_MAX_CVAR_START) {
-			fn_checkaltallowed(id, gs_cvars[gi_cvarnum], valueFromPlayer,
-				gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
-				s_VALUE, gs_calvalues[gi_cvarnum])
-		}
-		else {
-			fn_checkvalues(id, gs_cvars[gi_cvarnum], valueFromPlayer,
-				gf_calvalues[gi_cvarnum], s_VALUE, gs_calvalues[gi_cvarnum])
-		}
-	}
-}
-
-/**
- * OPTIMIZED: Check only the single cvar that changed in userinfo
- * Called from client_infochanged for real-time detection
- * This is MUCH faster than checking all 57 cvars (~1ms vs ~29ms)
- */
-public fn_check_single_cvar_changed(id) {
-	new s_VALUE[32]
-	new Float:valueFromPlayer
-
-	// Check each of our monitored cvars to see which one changed
-	// NOTE: We only check cvars that are actually in userinfo (skips empty values)
-	// This is still faster than checking all 57 cvars with full validation
-	for (gi_cvarnum = 0; gi_cvarnum < TOTAL_CVARS; gi_cvarnum++) {
-		// Get current value from userinfo
-		get_user_info(id, gs_cvars[gi_cvarnum], s_VALUE, charsmax(s_VALUE))
-
-		// Skip if cvar not in userinfo
-		if (s_VALUE[0] == 0)
-			continue
-
-		// Convert to float for comparison
-		valueFromPlayer = floatstr(s_VALUE)
-
-		// Quick check: Does this value match what we expect?
-		// If it matches, skip to next cvar (no violation)
-		if (gi_cvarnum >= MIN_MAX_CVAR_START) {
-			// Min/max range cvar - check if within allowed range
-			if (valueFromPlayer == gf_calvalues[gi_cvarnum] ||
-			    valueFromPlayer == gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START]) {
-				continue  // Value is correct - skip to next
-			}
-			// Value doesn't match - check and enforce
-			fn_checkaltallowed(id, gs_cvars[gi_cvarnum], valueFromPlayer,
-				gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
-				s_VALUE, gs_calvalues[gi_cvarnum])
-		}
-		else {
-			// Exact value cvar - check if matches expected
-			if (valueFromPlayer == gf_calvalues[gi_cvarnum]) {
-				continue  // Value is correct - skip to next
-			}
-			// Value doesn't match - check and enforce
-			fn_checkvalues(id, gs_cvars[gi_cvarnum], valueFromPlayer,
-				gf_calvalues[gi_cvarnum], s_VALUE, gs_calvalues[gi_cvarnum])
-		}
-	}
-}
-
-/**
- * Initial check using direct userinfo parsing
- * Called on player connect for ReAPI servers
- */
-public fn_initial_check_direct(id) {
-	// Check all cvars using direct parsing
-	fn_check_userinfo_direct(id)
-
-	// Mark first check as complete
-	if (!gb_FirstCheckComplete[id])
-		gb_FirstCheckComplete[id] = true
-
-	// Schedule periodic re-checks (15-60 second random intervals)
-	// NOTE: There's no reliable ReHLDS hook for userinfo changes during gameplay
-	// We use polling with direct parsing for ongoing enforcement
-	gf_randnum = random_float(15.0, 60.0)
-	set_task(gf_randnum, "fn_recheck_direct", id)
-}
-
-/**
- * Periodic re-check using direct userinfo parsing
- * Scheduled after initial check on ReAPI servers
- */
-public fn_recheck_direct(id) {
-	if (!is_user_connected(id) || gb_StopChecking[id])
-		return
-
-	// Check all cvars using direct parsing
-	fn_check_userinfo_direct(id)
-
-	// Schedule next check with random delay
-	gf_randnum = random_float(15.0, 60.0)
-	set_task(gf_randnum, "fn_recheck_direct", id)
-}
-
-/**
- * AMXX Forward: Called when player's userinfo changes (cvar changes)
- * This provides REAL-TIME detection on all servers (not just ReHLDS!)
- * NOTE: This fires for ALL userinfo changes (name, model, colors, cvars, etc.)
+ * Real-time cvar change detection for ALL cvars
+ * Requires KTPAMXX with pfnClientCvarChanged callback
  *
- * We can't determine WHAT changed without checking, so we rely on rate limiting
- * to prevent excessive checks when userinfo changes rapidly (e.g., name spam)
+ * @param id        Client index
+ * @param cvar      Name of the cvar that changed
+ * @param value     New value of the cvar
  */
-public client_infochanged(id) {
-	// Validate player ID
-	if (id < 1 || id > MAX_PLAYERS)
+public client_cvar_changed(id, const cvar[], const value[]) {
+	// Validate player
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id])
 		return PLUGIN_CONTINUE
 
-	// Don't process if player checking is disabled
-	if (!is_user_connected(id) || gb_StopChecking[id])
+	// Only check after initial check complete
+	if (!gb_FirstCheckComplete[id])
 		return PLUGIN_CONTINUE
 
-	// Only trigger check if first check is already complete
-	// (Prevents spam during initial connection)
-	if (gb_FirstCheckComplete[id]) {
-		// Rate limiting to prevent abuse/spam (max 1 check per second)
-		// Use get_systime() (pause-aware, 1-second precision)
-		new current_time = get_systime()
-		if (current_time - gi_last_check_time[id] < CHECK_RATE_LIMIT) {
-			// Too soon since last check - skip this one
-			return PLUGIN_CONTINUE
+	// Skip if we just enforced this cvar
+	if (gb_enforcing_cvar[id]) {
+		gb_enforcing_cvar[id] = false
+		return PLUGIN_CONTINUE
+	}
+
+	// Rate limiting (max 1 check per second per player)
+	new current_time = get_systime()
+	if (current_time - gi_last_check_time[id] < CHECK_RATE_LIMIT)
+		return PLUGIN_CONTINUE
+	gi_last_check_time[id] = current_time
+
+	// Find and validate this cvar
+	for (gi_cvarnum = 0; gi_cvarnum < TOTAL_CVARS; gi_cvarnum++) {
+		if (equal(cvar, gs_cvars[gi_cvarnum])) {
+			new Float:valueFromPlayer = floatstr(value)
+
+			if (gi_cvarnum >= MIN_MAX_CVAR_START) {
+				fn_checkaltallowed(id, cvar, valueFromPlayer,
+					gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
+					value, gs_calvalues[gi_cvarnum])
+			}
+			else {
+				fn_checkvalues(id, cvar, valueFromPlayer,
+					gf_calvalues[gi_cvarnum], value, gs_calvalues[gi_cvarnum])
+			}
+			break
 		}
-		gi_last_check_time[id] = current_time
-
-		// OPTIMIZED: Only check the cvar that actually changed (not all 57!)
-		// This reduces execution time from ~29ms to <1ms
-		fn_check_single_cvar_changed(id)
 	}
 
 	return PLUGIN_CONTINUE
 }
-#endif
+
+// ============================================================================
+// CLIENT EVENTS
+// ============================================================================
 
 public fn_msginitial(id) {
-	get_user_name(id, gs_logname, 31);
-	client_print(id, print_chat,    "%d %s version %s, KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
-	client_print(id, print_console, "%d %s version %s, KTP by %s", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR);
-	client_print(id, print_chat,    "Initializing KTP Cvar Checker for %s.", gs_logname);
-	client_print(id, print_console, "Initializing KTP Cvar Checker for %s.", gs_logname);
+	get_user_name(id, gs_logname, 31)
+	client_print(id, print_chat,    "%d %s v%s - Real-time cvar validation active", gs_year, gs_PLUGIN, gs_VERSION)
+	client_print(id, print_console, "%d %s v%s by %s - KTPAMXX Real-time Mode", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 }
 
 public client_putinserver(id) {
-	// Validate player ID before processing
-	if (id < 1 || id > MAX_PLAYERS)
+	if (id < 1 || id > MAX_PLAYERS || is_user_bot(id) || is_user_hltv(id))
 		return
 
-	if (!is_user_bot(id) && !is_user_hltv(id)) {
-		gb_FirstCheckComplete[id] = false;
-		gb_StopChecking[id]		  = false;
-		gi_numofattempts[id]	  = 0;
-		set_task(5.0, "fn_msginitial", id);
+	gb_FirstCheckComplete[id] = false
+	gb_StopChecking[id] = false
+	gi_standard_cvar_index[id] = 0
 
-		// On ReAPI servers, use instant userinfo parsing for initial check
-		// On non-ReAPI servers, use traditional query method
-		#if defined USING_REAPI
-		if (g_bUsingReHLDS) {
-			// ReAPI: Use instant direct parsing after 7.5s delay (allows player to fully connect)
-			set_task(7.5, "fn_initial_check_direct", id);
-		} else {
-			// Non-ReAPI: Use traditional query method
-			set_task(7.5, "fn_loopquery", id);
-		}
-		#else
-		// Non-ReAPI build: Always use traditional query method
-		set_task(7.5, "fn_loopquery", id);
-		#endif
-		// set_task ( 30, "fn_netgraph", id ); //Netgraph check was removed in 3.1
-	}
+	set_task(5.0, "fn_msginitial", id)
+	set_task(7.5, "fn_loopquery", id)
+
+	// Start periodic monitoring after initial check completes
+	set_task(10.0, "fn_start_monitoring", id)
 }
 
 public client_disconnected(id) {
-	gb_StopChecking[id] = true;
-	remove_task(id);
-	gb_FirstCheckComplete[id] = false;
-	gi_numofattempts[id] = 0;
-	gi_last_check_time[id] = 0;  // Reset rate limit timer
+	gb_StopChecking[id] = true
+	remove_task(id)
+	gb_FirstCheckComplete[id] = false
+	gi_last_check_time[id] = 0
 }
 
 // ============================================================================
-// CVAR QUERY & CHECKING FUNCTIONS
+// MANUAL CVAR CHECK COMMAND
 // ============================================================================
-// NOTE: These functions are used for:
-// 1. Initial cvar check after player connects (all servers)
-// 2. Periodic polling on non-ReAPI servers (15-60 second intervals)
-// 3. ReAPI servers use fn_check_userinfo_direct() for instant real-time checks
+
+public cmd_manual_check(id) {
+	if (!is_user_connected(id))
+		return PLUGIN_HANDLED
+
+	client_print(id, print_console, "[%s] Starting manual cvar check...", gs_PLUGIN)
+	fn_loopquery(id)
+	return PLUGIN_HANDLED
+}
+
+// ============================================================================
+// INITIAL CVAR CHECK
+// ============================================================================
 
 public fn_loopquery(id) {
 	gi_cvarnumID[id] = 0
-	set_task(0.15, "fn_query", id, "", 0, "a", TOTAL_CVARS)
+	fn_query_parallel(id)
 }
 
-public fn_query(id) {
-	if (gi_cvarnumID[id] < TOTAL_CVARS) {
-		// OPTIMIZED: Store cvar index for use in callback (eliminates linear search)
-		query_client_cvar(id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar")
-	}
-	gi_cvarnumID[id]++
-}
-
-public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[]) {
-	// OPTIMIZED: Pre-convert player value only (required values already pre-converted)
-	new Float:valueFromPlayer = floatstr(s_VALUE)
-
-	// OPTIMIZED: Use gi_cvarnumID directly - no linear search needed!
-	// We know which cvar index this callback is for from gi_cvarnumID
-	// This eliminates ~1600 string comparisons per full check
-	new temp_cvarnum = gi_cvarnumID[id] - 1  // Subtract 1 because it was incremented in fn_query
-
-	// Validate the index is in range BEFORE using it (sanity check)
-	if (temp_cvarnum < 0 || temp_cvarnum >= TOTAL_CVARS) {
-		log_amx("[%s] ERROR: Invalid cvar index %d (cvarnumID=%d) for %s",
-			gs_PLUGIN, temp_cvarnum, gi_cvarnumID[id], s_CVARNAME)
+public fn_query_parallel(id) {
+	if (gi_cvarnumID[id] >= TOTAL_CVARS) {
+		fn_firstcomplete(id)
 		return
 	}
 
-	gi_cvarnum = temp_cvarnum  // Safe to assign after validation
+	new batch_count = 0
+	new start_idx = gi_cvarnumID[id]
 
-	// Check if this is a min/max range cvar (indices 49-56)
-	// OPTIMIZED: Use pre-converted float arrays instead of floatstr()
-	if (gi_cvarnum >= MIN_MAX_CVAR_START) {
+	for (new i = start_idx; i < TOTAL_CVARS && batch_count < PARALLEL_BATCH_SIZE; i++) {
+		query_client_cvar(id, gs_cvars[i], "fn_querycvar")
+		gi_cvarnumID[id]++
+		batch_count++
+	}
+
+	if (gi_cvarnumID[id] < TOTAL_CVARS)
+		set_task(0.25, "fn_query_parallel", id)
+	else
+		fn_firstcomplete(id)
+}
+
+public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[]) {
+	new Float:valueFromPlayer = floatstr(s_VALUE)
+
+	// Find the cvar index by name (don't rely on counter)
+	new cvar_index = -1
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		if (equal(s_CVARNAME, gs_cvars[i])) {
+			cvar_index = i
+			break
+		}
+	}
+
+	if (cvar_index < 0) {
+		log_amx("[%s] ERROR: Unknown cvar '%s' in callback", gs_PLUGIN, s_CVARNAME)
+		return
+	}
+
+	if (cvar_index >= MIN_MAX_CVAR_START) {
 		fn_checkaltallowed(id, s_CVARNAME, valueFromPlayer,
-			gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
-			s_VALUE, s_CALVALUE)
+			gf_calvalues[cvar_index], gf_altvalues[cvar_index - MIN_MAX_CVAR_START],
+			s_VALUE, gs_calvalues[cvar_index])
 	}
 	else {
 		fn_checkvalues(id, s_CVARNAME, valueFromPlayer,
-			gf_calvalues[gi_cvarnum], s_VALUE, s_CALVALUE)
-	}
-
-	// Check if this is the last cvar to mark completion
-	if (gi_cvarnum == LAST_CVAR_INDEX) {
-		fn_firstcomplete(id)
+			gf_calvalues[cvar_index], s_VALUE, gs_calvalues[cvar_index])
 	}
 }
 
 public fn_firstcomplete(id) {
-	// Mark first check as complete (only runs once per player)
-	if (!gb_FirstCheckComplete[id])
+	if (!gb_FirstCheckComplete[id]) {
 		gb_FirstCheckComplete[id] = true
-
-	// On ReAPI servers, we use real-time userinfo monitoring - no polling needed!
-	// On non-ReAPI servers, continue periodic polling
-	#if defined USING_REAPI
-	if (g_bUsingReHLDS) {
-		// Real-time monitoring enabled - no need for periodic polling
-		return
+		client_print(id, print_console, "[%s] Initial check complete - Real-time monitoring active", gs_PLUGIN)
 	}
-	#endif
+}
 
-	// Schedule next check with random delay (prevents server lag spikes)
-	// Only reached on non-ReAPI servers
-	gf_randnum = random_float(0.15, 60.0)
-	set_task(gf_randnum, "fn_loopquery", id)
+// ============================================================================
+// PERIODIC MONITORING SYSTEM
+// ============================================================================
+
+/**
+ * Start periodic monitoring after initial check completes
+ * Priority cvars: checked every 2 seconds
+ * Standard cvars: rotated through every 10 seconds
+ */
+public fn_start_monitoring(id) {
+	if (!is_user_connected(id) || gb_StopChecking[id])
+		return
+
+	// Start priority cvar checks (repeating every 2 seconds)
+	set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id, _, _, "b")
+
+	// Start standard cvar rotation (repeating every 10 seconds)
+	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id, _, _, "b")
+
+	log_amx("[%s] Periodic monitoring started for player %d", gs_PLUGIN, id)
+}
+
+/**
+ * Check all priority cvars (called every 2 seconds)
+ * These are the most critical anti-cheat cvars
+ */
+public fn_check_priority_cvars(id) {
+	if (!is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
+		return
+
+	// Query all priority cvars
+	for (new i = 0; i < PRIORITY_CVARS_COUNT; i++) {
+		query_client_cvar(id, gs_priority_cvars[i], "fn_querycvar")
+	}
+}
+
+/**
+ * Check standard cvars via rotation (called every 10 seconds)
+ * Queries 5 cvars each time, cycling through all 49 standard cvars
+ */
+public fn_check_standard_cvars(id) {
+	if (!is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
+		return
+
+	// Query 5 standard cvars per check (completes full rotation in ~100 seconds)
+	new cvars_to_check = 5
+
+	for (new i = 0; i < cvars_to_check && gi_standard_cvar_index[id] < STANDARD_CVARS_COUNT; i++) {
+		query_client_cvar(id, gs_standard_cvars[gi_standard_cvar_index[id]], "fn_querycvar")
+		gi_standard_cvar_index[id]++
+	}
+
+	// Reset rotation when we reach the end
+	if (gi_standard_cvar_index[id] >= STANDARD_CVARS_COUNT) {
+		gi_standard_cvar_index[id] = 0
+	}
 }
 
 // ============================================================================
@@ -724,12 +463,9 @@ public fn_firstcomplete(id) {
 // ============================================================================
 
 public fn_checkvalues(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_VALUE[], const s_CALVALUE[]) {
-	// OPTIMIZED: Removed get_user_name() - it's called in fn_fcoslogshow() if needed
 	new bool: isInvalid = false
 
-	// Special handling for m_pitch (allows positive or negative)
 	if (equal(s_CVARNAME, gs_pitch)) {
-		// OPTIMIZED: Check floats first (faster than string comparison)
 		if (!(floatabs(valueFromPlayer - calFloatValue) <= FLOAT_PRECISION ||
 			  floatabs(valueFromPlayer + calFloatValue) <= FLOAT_PRECISION ||
 			  equal(s_VALUE, inverse_p) || equal(s_VALUE, s_CALVALUE))) {
@@ -737,68 +473,46 @@ public fn_checkvalues(id, const s_CVARNAME[], Float: valueFromPlayer, Float: cal
 		}
 	}
 	else {
-		// OPTIMIZED: Check float first, then string fallback
 		if (!(floatabs(valueFromPlayer - calFloatValue) <= FLOAT_PRECISION || equal(s_VALUE, s_CALVALUE))) {
 			isInvalid = true
 		}
 	}
 
-	if (isInvalid) fn_fcoslogshow(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+	if (isInvalid) fn_enforce_cvar(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
 }
 
 public fn_checkaltallowed(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
-	// OPTIMIZED: Removed get_user_name() - it's called in fn_fcoslogshow() if needed
-	// Range check - value must be between calFloatValue (min) and altFloatValue (max)
 	if (valueFromPlayer < calFloatValue || valueFromPlayer > altFloatValue) {
-		fn_fcoslogshow(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		fn_enforce_cvar(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
 	}
 }
 
 // ============================================================================
-// PUNISHMENT & ENFORCEMENT FUNCTIONS
+// ENFORCEMENT & PUNISHMENT
 // ============================================================================
 
-/**
- * Helper function to clean up player data after punishment
- * Eliminates code duplication (was repeated 3 times)
- */
-stock fn_cleanup_player(id) {
-	gb_StopChecking[id] = true
-	remove_task(id)
-	gb_FirstCheckComplete[id] = false
-	gi_numofattempts[id] = 0
-	gi_cvarnumID[id] = -1
-}
+public fn_enforce_cvar(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
+	if (gb_StopChecking[id])
+		return PLUGIN_CONTINUE
 
-public fn_fcoslogshow(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
-	if (gb_StopChecking[id]) return PLUGIN_CONTINUE
-
-	// OPTIMIZED: Cache gs_pitch comparison (used twice below)
 	new bool:is_pitch = equal(s_CVARNAME, gs_pitch)
 
-	// Force correct cvar value on client
-	// Use engclient_cmd instead of client_cmd to avoid newline issues
-	// engclient_cmd sends commands as if typed in console (no automatic newline)
-	new cmd[128]
+	// Set enforcement flag to prevent recursion
+	gb_enforcing_cvar[id] = true
 
+	// Force correct value on client
 	if (is_pitch && (valueFromPlayer < 0.0)) {
-		formatex(cmd, charsmax(cmd), "%s -0.022", s_CVARNAME)
-		engclient_cmd(id, cmd)
+		client_cmd(id, "%s -0.022", s_CVARNAME)
 	}
 	else if (is_pitch && (valueFromPlayer >= 0.0)) {
-		formatex(cmd, charsmax(cmd), "%s 0.022", s_CVARNAME)
-		engclient_cmd(id, cmd)
+		client_cmd(id, "%s 0.022", s_CVARNAME)
 	}
 	else if (calFloatValue >= 100.0) {
-		// For large values (like rate: 100000), use integer format to avoid truncation
 		new intValue = floatround(calFloatValue, floatround_floor)
-		formatex(cmd, charsmax(cmd), "%s %d", s_CVARNAME, intValue)
-		engclient_cmd(id, cmd)
+		client_cmd(id, "%s %d", s_CVARNAME, intValue)
 	}
 	else {
-		// For small values, use float format with 3 decimals
-		formatex(cmd, charsmax(cmd), "%s %.3f", s_CVARNAME, calFloatValue)
-		engclient_cmd(id, cmd)
+		client_cmd(id, "%s %.3f", s_CVARNAME, calFloatValue)
 	}
 
 	// Get player info
@@ -806,105 +520,108 @@ public fn_fcoslogshow(id, const s_CVARNAME[], Float: valueFromPlayer, Float: cal
 	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
 	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
 
-	// Validate we got valid data (player might have disconnected)
 	if (gs_logname[0] == 0 || gs_logauthid[0] == 0) {
 		log_amx("[%s] WARNING: Player %d disconnected before logging violation", gs_PLUGIN, id)
 		return PLUGIN_CONTINUE
 	}
 
-	// Log and notify
-	client_print(0, print_chat, "Attempted fix for %s. %s: %f -> %f", gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
+	// Log violation
 	log_amx("%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
-	// OPTIMIZED: Removed unused get_players() call
 
-	// Only apply punishments after first check is complete
-	if (gb_FirstCheckComplete[id]) {
-		gi_numofattempts[id]++
-		gi_userid = get_user_userid(id)
-		formatex(gs_reason, charsmax(gs_reason), "%L", id, "FCOS_LANG_REASON", s_CVARNAME, calFloatValue, valueFromPlayer)
+	// Announce to all players
+	client_print(0, print_chat, "[%s] %s had invalid %s (%.2f) - corrected to %.2f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
-		// OPTIMIZED: Cache ALL pcvar values including ban_time
-		new warn_enabled = get_pcvar_num(gp_fcos_warn)
-		new warn_attempt = get_pcvar_num(gp_fcos_attempt_num_warn)
-		new warn_repeat = get_pcvar_num(gp_fcos_repeat_warning)
-		new change_name = get_pcvar_num(gp_fcos_change_name)
-		new name_attempt = get_pcvar_num(gp_fcos_attempt_num_namechange)
-		new slay_enabled = get_pcvar_num(gp_fcos_slay)
-		new slay_attempt = get_pcvar_num(gp_fcos_attempt_num_slay)
-		new slay_repeat = get_pcvar_num(gp_fcos_repeat_slaying)
-		new kick_or_ban = get_pcvar_num(gp_fcos_kick_or_ban)
-		new kickban_attempt = get_pcvar_num(gp_fcos_attempt_num_kickorban)
-		gi_bantime = get_pcvar_num(gp_fcos_ban_time)  // Moved here from line 703
-
-		// Warning MOTD
-		if (warn_enabled && (gi_numofattempts[id] == warn_attempt || (gi_numofattempts[id] > warn_attempt && warn_repeat))) {
-			fn_formatandshowmotd(id, s_CVARNAME, calFloatValue, valueFromPlayer)
-		}
-
-		// Name change punishment
-		if (change_name && gi_numofattempts[id] == name_attempt) {
-			formatex(gs_newname, charsmax(gs_newname), "[fcos] %s", s_CVARNAME)
-			set_user_info(id, "name", gs_newname)
-		}
-
-		// Slay punishment
-		if (slay_enabled && is_user_alive(id) && (gi_numofattempts[id] == slay_attempt || (gi_numofattempts[id] > slay_attempt && slay_repeat))) {
-			user_kill(id)
-		}
-
-		// Kick punishment
-		if (kick_or_ban == 1 && gi_numofattempts[id] == kickban_attempt) {
-			if (!is_user_connected(id)) return PLUGIN_CONTINUE
-			server_cmd("kick #%i %s", gi_userid, gs_reason)
-			fn_cleanup_player(id)
-		}
-
-		// Ban punishment
-		if (kick_or_ban == 2 && gi_numofattempts[id] == kickban_attempt) {
-			if (!is_user_connected(id)) return PLUGIN_CONTINUE
-			// OPTIMIZED: gi_bantime already cached above (line 681)
-			if (equal(gs_logauthid, "STEAM_ID_PENDING")) return PLUGIN_CONTINUE
-
-			if (get_pcvar_num(gp_fcos_use_amx_bans)) {
-				server_cmd("amx_ban %i %s %s", gi_bantime, gs_logauthid, gs_reason)
-				fn_cleanup_player(id)
-			}
-			else {
-				server_cmd("banid %i #%i;writeid", gi_bantime, gi_userid)
-				server_cmd("kick #%i %s", gi_userid, gs_reason)
-				fn_cleanup_player(id)
-			}
-		}
+	// Send Discord webhook if enabled
+	if (get_pcvar_num(gp_discord_enabled)) {
+		fn_send_discord_webhook(gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
 	}
 
 	return PLUGIN_CONTINUE
 }
 
 // ============================================================================
-// MOTD DISPLAY FUNCTIONS
+// DISCORD WEBHOOK LOGGING
 // ============================================================================
 
-public fn_formatandshowmotd(id, const s_CVARNAME[], Float: calFloatValue, Float: valueFromPlayer) {
-	// Use charsmax for all buffer sizes
-	formatex(gs_motdtitle, charsmax(gs_motdtitle), "%L", id, "FCOS_LANG_MOTD_TITLE")
-	formatex(gs_subtitle, charsmax(gs_subtitle), "%L", id, "FCOS_LANG_MOTD_SUBTITLE")
-	formatex(gs_mainmsg1, charsmax(gs_mainmsg1), "%L", id, "FCOS_LANG_MOTD_MAINMSG1")
-	formatex(gs_mainmsg2, charsmax(gs_mainmsg2), "%L", id, "FCOS_LANG_MOTD_MAINMSG2", s_CVARNAME, calFloatValue, valueFromPlayer)
-	formatex(gs_mainmsg3, charsmax(gs_mainmsg3), "%L", id, "FCOS_LANG_MOTD_MAINMSG3")
-	formatex(gs_mainmsg4, charsmax(gs_mainmsg4), "%L", id, "FCOS_LANG_MOTD_MAINMSG4")
-	formatex(gs_mainmsg5, charsmax(gs_mainmsg5), "%L", id, "FCOS_LANG_MOTD_MAINMSG5")
+public fn_send_discord_webhook(const name[], const authid[], const ip[], const cvar[], Float:player_value, Float:correct_value) {
+	// Get webhook URL
+	get_pcvar_string(gp_discord_webhook, gs_discord_webhook, charsmax(gs_discord_webhook))
 
-	gi_len = formatex(gs_motd, charsmax(gs_motd), "<body bgcolor='#00000'><font color='#FFB000'>")
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "<center><b><font size='8' color='#FF0000'>%s</font><br>", gs_motdtitle)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s</center><br>", gs_subtitle)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg1)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg2)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg3)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s ", gs_mainmsg4)
-	gi_len += formatex(gs_motd[gi_len], charsmax(gs_motd) - gi_len, "%s", gs_mainmsg5)
+	// Validate webhook URL
+	if (gs_discord_webhook[0] == 0) {
+		log_amx("[%s] ERROR: Discord webhook enabled but URL not configured", gs_PLUGIN)
+		return
+	}
 
-	show_motd(id, gs_motd, gs_motdtitle)
+	// Build Discord embed JSON
+	new json[2048]
+	new hostname[64], timestamp[32]
+	get_cvar_string("hostname", hostname, charsmax(hostname))
+	fn_get_iso_timestamp(timestamp, charsmax(timestamp))
+
+	// Escape quotes in strings for JSON
+	new safe_name[64], safe_cvar[64], safe_hostname[128]
+	fn_escape_json(name, safe_name, charsmax(safe_name))
+	fn_escape_json(cvar, safe_cvar, charsmax(safe_cvar))
+	fn_escape_json(hostname, safe_hostname, charsmax(safe_hostname))
+
+	// Build JSON payload in parts
+	new temp[512]
+	formatex(json, charsmax(json), "{^"embeds^":[{^"title^":^"CVAR Violation Detected^",^"color^":15158332,^"fields^":[")
+	formatex(temp, charsmax(temp), "{^"name^":^"Player^",^"value^":^"%s^",^"inline^":true},", safe_name)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "{^"name^":^"SteamID^",^"value^":^"%s^",^"inline^":true},", authid)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "{^"name^":^"IP^",^"value^":^"%s^",^"inline^":true},", ip)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "{^"name^":^"Cvar^",^"value^":^"%s^",^"inline^":true},", safe_cvar)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "{^"name^":^"Player Value^",^"value^":^"%.3f^",^"inline^":true},", player_value)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "{^"name^":^"Correct Value^",^"value^":^"%.3f^",^"inline^":true}", correct_value)
+	add(json, charsmax(json), temp)
+	formatex(temp, charsmax(temp), "],^"footer^":{^"text^":^"%s^"},^"timestamp^":^"%s^"}]}", safe_hostname, timestamp)
+	add(json, charsmax(json), temp)
+
+	// Save JSON to temp file
+	new temp_file[128]
+	get_configsdir(temp_file, charsmax(temp_file))
+	format(temp_file, charsmax(temp_file), "%s/discord_payload.json", temp_file)
+
+	new file = fopen(temp_file, "wt")
+	if (file) {
+		fputs(file, json)
+		fclose(file)
+
+		// Execute curl command in background
+		new curl_cmd[512]
+		formatex(curl_cmd, charsmax(curl_cmd), "curl -X POST -H ^"Content-Type: application/json^" -d @^"%s^" ^"%s^" > /dev/null 2>&1 &", temp_file, gs_discord_webhook)
+		server_cmd(curl_cmd)
+	}
+	else {
+		log_amx("[%s] ERROR: Failed to create Discord payload file", gs_PLUGIN)
+	}
 }
+
+// Escape special characters for JSON
+public fn_escape_json(const input[], output[], maxlen) {
+	new i = 0, j = 0
+	while (input[i] && j < maxlen - 2) {
+		if (input[i] == 34 || input[i] == 92) {  // 34 = quote, 92 = backslash
+			output[j++] = 92  // backslash
+		}
+		output[j++] = input[i++]
+	}
+	output[j] = 0
+}
+
+// Get ISO 8601 timestamp for Discord
+stock fn_get_iso_timestamp(output[], maxlen) {
+	new timestamp_str[32]
+	get_time("%Y-%m-%dT%H:%M:%SZ", timestamp_str, charsmax(timestamp_str))
+	copy(output, maxlen, timestamp_str)
+}
+
 /* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
  *{\\ rtf1\\ ansi\\ deff0{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ lang1033\\ f0\\ fs16 \n\\ par }
  */
