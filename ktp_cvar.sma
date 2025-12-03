@@ -225,7 +225,7 @@ public fn_init_float_arrays() {
 }
 
 public fn_servermessage() {
-	server_print("%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+	server_print("%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_year, gs_AUTHOR)
 	server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG1")
 	if (file_exists(gs_fcosconfigfile))
 		server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG2")

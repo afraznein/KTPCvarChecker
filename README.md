@@ -363,7 +363,7 @@ public fn_send_discord_webhook(...)      // Send Discord embed
 
 ```bash
 # Navigate to AMX scripting directory
-cd addons/amxmodx/scripting
+cd <basedir>/scripting
 
 # Compile plugin
 amxxpc ktp_cvar.sma -oktp_cvar.amxx
@@ -378,15 +378,17 @@ cp ktp_cvar.amxx ../plugins/
 
 ### Step 3: Enable Plugin
 
-Edit `addons/amxmodx/configs/plugins.ini`:
+Edit `<configsdir>/plugins.ini`:
 ```ini
 ; KTP Cvar Checker - Anti-cheat enforcement system
 ktp_cvar.amxx
 ```
 
+> **Note:** `<configsdir>` is automatically detected (e.g., `addons/ktpamx/configs/` for KTP AMX or `addons/amxmodx/configs/` for standard AMX Mod X).
+
 ### Step 4: Configure Settings (Optional)
 
-Create `addons/amxmodx/configs/ktp_cvar.cfg`:
+Create `<configsdir>/ktp_cvar.cfg`:
 ```cfg
 // Discord webhook (optional)
 fcos_discord_enabled "0"                         // 1 = enabled
@@ -407,11 +409,13 @@ amx_plugins reload ktp_cvar.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 7.3
+// KTP Cvar Checker version 7.4
 
 // Check AMX logs on startup
 // Should show:
-// [KTP Cvar Checker] KTPAMXX REAL-TIME detection for ALL 59 cvars!
+// [KTP Cvar Checker] Monitoring 59 cvars with priority-based system:
+// [KTP Cvar Checker] - Priority cvars (9): checked every 2 seconds
+// [KTP Cvar Checker] - Standard cvars (50): rotated every 10 seconds
 // [KTP Cvar Checker] Enforcement: Auto-correct + console logging + Discord webhooks
 ```
 
@@ -507,12 +511,14 @@ ktp_cvar_version
 
 **Monitor Violations:**
 ```bash
-# Check AMX logs
-cat addons/amxmodx/logs/L1128.log | grep "KTP Cvar"
+# Check AMX logs (adjust path for your installation)
+cat <logsdir>/L1128.log | grep "KTP Cvar"
 
 # Look for patterns of violations
 # Investigate players with multiple violations
 ```
+
+> **Note:** Replace `<logsdir>` with your actual logs directory (e.g., `addons/ktpamx/logs/` or `addons/amxmodx/logs/`).
 
 **Manual Cvar Check:**
 - Players can type `/cvar` in chat to trigger manual check
@@ -527,7 +533,7 @@ cat addons/amxmodx/logs/L1128.log | grep "KTP Cvar"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 7.3
+// KTP Cvar Checker version 7.4
 ```
 
 **If You Receive Violations:**
