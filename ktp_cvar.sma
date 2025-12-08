@@ -2,10 +2,16 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.4
- *   Release Date:      2025-12-02
+ *   Current Version:   7.5
+ *   Release Date:      2025-12-08
  *
  *   Changelog:
+ *   7.5 2025-12-08 - Timing fixes and debug improvements
+ *                    * FIXED: Moved fn_servermessage() to plugin_cfg() for proper timing
+ *                    + ADDED: Debug logging to fn_msginitial() for troubleshooting
+ *                    + ADDED: is_user_connected() safety check before client prints
+ *                    * CHANGED: "Initial check complete" now uses print_chat instead of print_console
+ *                    * BRANDING: Updated references from "KTPAMXX" to "KTP AMX"
  *   7.4 2025-12-02 - Priority-based periodic monitoring system
  *                    + ADDED: Periodic cvar queries to trigger ReHLDS pfnClientCvarChanged hook
  *                    + ADDED: Priority cvar system - 9 critical cvars checked every 2 seconds
@@ -30,11 +36,11 @@
  *                    + ADDED: fcos_discord_webhook cvar (webhook URL)
  *                    - REMOVED: All punishment cvars (warn, name change, slay)
  *                    - SIMPLIFIED: Pure enforcement (auto-correct) + logging only
- *   7.0 2025-11-28 - MAJOR UPGRADE: Real-time detection with KTPAMXX - Simplified & Optimized
+ *   7.0 2025-11-28 - MAJOR UPGRADE: Real-time detection with KTP AMX - Simplified & Optimized
  *                    + ADDED: client_cvar_changed() forward for REAL-TIME detection of ALL cvars
  *                    + PERFORMANCE: 100% real-time detection - no periodic polling overhead
  *                    + PERFORMANCE: Instant detection for all cvars (< 1 second response time)
- *                    * REQUIRES: KTPAMXX with pfnClientCvarChanged callback
+ *                    * REQUIRES: KTP AMX with pfnClientCvarChanged callback
  *                    - REMOVED: Backwards compatibility code (ReAPI, periodic polling)
  *                    - REMOVED: Kick/ban punishment system (enforcement only)
  *                    - REMOVED: MOTD warning system (console logging only)
@@ -49,7 +55,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.4";
+new const gs_VERSION[] = "7.5";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 
@@ -207,6 +213,9 @@ public plugin_init() {
 		server_cmd("exec %s", gs_fcosconfigfile)
 
 	fn_init_float_arrays()
+}
+
+public plugin_cfg () {
 	fn_servermessage()
 }
 
@@ -242,7 +251,7 @@ public fn_servermessage() {
 
 /**
  * Real-time cvar change detection for ALL cvars
- * Requires KTPAMXX with pfnClientCvarChanged callback
+ * Requires KTP AMX with pfnClientCvarChanged callback
  *
  * @param id        Client index
  * @param cvar      Name of the cvar that changed
@@ -295,9 +304,20 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 // ============================================================================
 
 public fn_msginitial(id) {
+	log_amx("[KTP DEBUG] fn_msginitial called for player %d", id)
+
+	if (!is_user_connected(id)) {
+		log_amx("[KTP DEBUG] fn_msginitial: player %d not connected, aborting", id)
+		return
+	}
+
 	get_user_name(id, gs_logname, 31)
+	log_amx("[KTP DEBUG] fn_msginitial: player name = %s", gs_logname)
+
 	client_print(id, print_chat,    "%d %s v%s - Real-time cvar validation active", gs_year, gs_PLUGIN, gs_VERSION)
-	client_print(id, print_console, "%d %s v%s by %s - KTPAMXX Real-time Mode", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+	client_print(id, print_console, "%d %s v%s by %s - KTP AMX Real-time Mode", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+
+	log_amx("[KTP DEBUG] fn_msginitial: client_print calls completed for player %d", id)
 }
 
 public client_putinserver(id) {
@@ -396,7 +416,7 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[])
 public fn_firstcomplete(id) {
 	if (!gb_FirstCheckComplete[id]) {
 		gb_FirstCheckComplete[id] = true
-		client_print(id, print_console, "[%s] Initial check complete - Real-time monitoring active", gs_PLUGIN)
+		client_print(id, print_chat, "[%s] Initial check complete - Real-time monitoring active", gs_PLUGIN)
 	}
 }
 

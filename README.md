@@ -315,7 +315,7 @@ L 11/28/2025 - 14:32:18: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 19
 
 ### ktp_cvar.sma - Core Enforcement Engine
 
-**Version:** 7.4 (2025-12-02)
+**Version:** 7.5 (2025-12-08)
 **File Size:** ~630 lines
 **Purpose:** Priority-based client cvar monitoring using periodic queries + KTPAMXX's client_cvar_changed callback
 
@@ -409,7 +409,7 @@ amx_plugins reload ktp_cvar.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 7.4
+// KTP Cvar Checker version 7.5
 
 // Check AMX logs on startup
 // Should show:
@@ -533,7 +533,7 @@ cat <logsdir>/L1128.log | grep "KTP Cvar"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 7.4
+// KTP Cvar Checker version 7.5
 ```
 
 **If You Receive Violations:**
@@ -597,6 +597,13 @@ fcos_discord_webhook "YOUR_WEBHOOK"   // Your Discord webhook URL
 ---
 
 ## 📝 Version History
+
+### v7.5 (2025-12-08) - Timing Fixes and Debug Improvements
+- 🔧 **FIXED: fn_servermessage() timing** - Moved from plugin_init() to plugin_cfg() for proper execution order
+- ✅ **ADDED: Debug logging** - fn_msginitial() now logs debug info for troubleshooting
+- ✅ **ADDED: Safety check** - is_user_connected() check before client prints
+- 🔧 **CHANGED: Initial check message** - Now uses print_chat instead of print_console for better visibility
+- 📝 **BRANDING: Updated "KTPAMXX" to "KTP AMX"** - Consistent naming across all references
 
 ### v7.4 (2025-12-02) - Priority-Based Periodic Monitoring
 - ✅ **ADDED: Periodic cvar query system** - Actively queries cvars to trigger ReHLDS callback
