@@ -314,8 +314,8 @@ public fn_msginitial(id) {
 	get_user_name(id, gs_logname, 31)
 	log_amx("[KTP DEBUG] fn_msginitial: player name = %s", gs_logname)
 
-	client_print(id, print_chat,    "%d %s v%s - Real-time cvar validation active", gs_year, gs_PLUGIN, gs_VERSION)
-	client_print(id, print_console, "%d %s v%s by %s - KTP AMX Real-time Mode", gs_year, gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+	client_print(id, print_chat,    "%s version %s by %s - Real-time cvar validation active", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+	client_print(id, print_console, "%s version %s by %s - KTP AMX Real-time Mode", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 
 	log_amx("[KTP DEBUG] fn_msginitial: client_print calls completed for player %d", id)
 }

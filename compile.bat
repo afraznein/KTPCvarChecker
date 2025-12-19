@@ -39,6 +39,15 @@ if %ERRORLEVEL% EQU 0 (
     echo BUILD SUCCESSFUL!
     echo ========================================
     echo Output: %OUTPUT%\ktp_cvar.amxx
+    echo.
+    echo Copying to staging folder...
+    set "STAGING=N:\Nein_\KTP DoD Server\dod\addons\ktpamx\plugins"
+    copy /Y "%OUTPUT%\ktp_cvar.amxx" "%STAGING%\ktp_cvar.amxx"
+    if %ERRORLEVEL% EQU 0 (
+        echo Staged: %STAGING%\ktp_cvar.amxx
+    ) else (
+        echo WARNING: Failed to copy to staging folder
+    )
 ) else (
     echo.
     echo ========================================
