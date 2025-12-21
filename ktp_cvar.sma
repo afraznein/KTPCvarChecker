@@ -2,10 +2,22 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.5
- *   Release Date:      2025-12-08
+ *   Current Version:   7.7
+ *   Release Date:      2025-12-20
  *
  *   Changelog:
+ *   7.7 2025-12-20 - Shared Discord config via ktp_discord.inc
+ *                    * CHANGED: Now uses ktp_discord.inc for Discord integration
+ *                    * CHANGED: Config now loaded from discord.ini (same as other KTP plugins)
+ *                    - REMOVED: fcos_discord_enabled and fcos_discord_webhook cvars
+ *                    - REMOVED: Direct webhook code (replaced with relay pattern)
+ *   7.6 2025-12-20 - cl_filterstuffcmd detection and warning system
+ *                    + ADDED: Enforcement attempt tracking per player per cvar
+ *                    + ADDED: After 3 failed enforcement attempts, shows warning message
+ *                    + ADDED: Warning explains cl_filterstuffcmd must be 0 and how to fix
+ *                    + ADDED: Announcement to all players when enforcement is blocked
+ *                    * CHANGED: Stops spamming chat after warning is shown once per cvar
+ *                    * CHANGED: Resets tracking when player fixes the cvar value
  *   7.5 2025-12-08 - Timing fixes and debug improvements
  *                    * FIXED: Moved fn_servermessage() to plugin_cfg() for proper timing
  *                    + ADDED: Debug logging to fn_msginitial() for troubleshooting
@@ -49,13 +61,14 @@
 
 #include <amxmodx>
 #include <amxmisc>
+#include <ktp_discord>
 
 // ============================================================================
 // PLUGIN INFORMATION
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.5";
+new const gs_VERSION[] = "7.7";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 
@@ -96,8 +109,7 @@ new const Float: FLOAT_PRECISION = 0.00005;
 // CVAR POINTERS
 // ============================================================================
 
-new gp_discord_webhook
-new gp_discord_enabled
+// Discord config now loaded via ktp_discord.inc
 
 // ============================================================================
 // PLAYER DATA ARRAYS
@@ -112,6 +124,11 @@ new bool:gb_enforcing_cvar[MAX_PLAYERS]
 // Periodic monitoring state
 new gi_standard_cvar_index[MAX_PLAYERS]  // Current index in standard cvar rotation
 
+// Enforcement attempt tracking (detect cl_filterstuffcmd blocking)
+new gi_enforce_attempts[MAX_PLAYERS][TOTAL_CVARS]  // Count of failed enforcement attempts per cvar
+new bool:gb_filterstuff_warned[MAX_PLAYERS][TOTAL_CVARS]  // Already showed warning for this cvar
+#define MAX_ENFORCE_ATTEMPTS 3  // After this many attempts, show cl_filterstuffcmd warning
+
 // ============================================================================
 // GLOBAL VARIABLES
 // ============================================================================
@@ -124,9 +141,6 @@ new gs_fcosconfigfile[128]
 new gs_logname[32]
 new gs_logauthid[35]
 new gs_logip[16]
-
-// Discord webhook
-new gs_discord_webhook[512]
 
 // ============================================================================
 // CVAR CHECKING ARRAYS
@@ -198,9 +212,7 @@ public plugin_init() {
 	register_plugin(gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 	register_cvar("ktp_cvar_version", gs_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
 
-	// Discord webhook logging
-	gp_discord_enabled = register_cvar("fcos_discord_enabled", "0")  // 0 = disabled, 1 = enabled
-	gp_discord_webhook = register_cvar("fcos_discord_webhook", "")   // Discord webhook URL
+	// Discord webhook logging now uses shared ktp_discord.inc
 
 	// Register /cvar command for manual cvar check
 	register_clcmd("say /cvar", "cmd_manual_check")
@@ -217,6 +229,7 @@ public plugin_init() {
 
 public plugin_cfg () {
 	fn_servermessage()
+	ktp_discord_load_config()
 }
 
 // ============================================================================
@@ -284,12 +297,12 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 			new Float:valueFromPlayer = floatstr(value)
 
 			if (gi_cvarnum >= MIN_MAX_CVAR_START) {
-				fn_checkaltallowed(id, cvar, valueFromPlayer,
+				fn_checkaltallowed(id, gi_cvarnum, cvar, valueFromPlayer,
 					gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
 					value, gs_calvalues[gi_cvarnum])
 			}
 			else {
-				fn_checkvalues(id, cvar, valueFromPlayer,
+				fn_checkvalues(id, gi_cvarnum, cvar, valueFromPlayer,
 					gf_calvalues[gi_cvarnum], value, gs_calvalues[gi_cvarnum])
 			}
 			break
@@ -340,6 +353,12 @@ public client_disconnected(id) {
 	remove_task(id)
 	gb_FirstCheckComplete[id] = false
 	gi_last_check_time[id] = 0
+
+	// Reset enforcement tracking
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		gi_enforce_attempts[id][i] = 0
+		gb_filterstuff_warned[id][i] = false
+	}
 }
 
 // ============================================================================
@@ -403,12 +422,12 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[])
 	}
 
 	if (cvar_index >= MIN_MAX_CVAR_START) {
-		fn_checkaltallowed(id, s_CVARNAME, valueFromPlayer,
+		fn_checkaltallowed(id, cvar_index, s_CVARNAME, valueFromPlayer,
 			gf_calvalues[cvar_index], gf_altvalues[cvar_index - MIN_MAX_CVAR_START],
 			s_VALUE, gs_calvalues[cvar_index])
 	}
 	else {
-		fn_checkvalues(id, s_CVARNAME, valueFromPlayer,
+		fn_checkvalues(id, cvar_index, s_CVARNAME, valueFromPlayer,
 			gf_calvalues[cvar_index], s_VALUE, gs_calvalues[cvar_index])
 	}
 }
@@ -482,7 +501,7 @@ public fn_check_standard_cvars(id) {
 // CVAR VALIDATION FUNCTIONS
 // ============================================================================
 
-public fn_checkvalues(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_VALUE[], const s_CALVALUE[]) {
+public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_VALUE[], const s_CALVALUE[]) {
 	new bool: isInvalid = false
 
 	if (equal(s_CVARNAME, gs_pitch)) {
@@ -498,12 +517,28 @@ public fn_checkvalues(id, const s_CVARNAME[], Float: valueFromPlayer, Float: cal
 		}
 	}
 
-	if (isInvalid) fn_enforce_cvar(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+	if (isInvalid) {
+		fn_enforce_cvar(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+	} else {
+		// Cvar is valid - reset enforcement tracking for this cvar
+		fn_reset_enforce_tracking(id, cvar_index)
+	}
 }
 
-public fn_checkaltallowed(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
+public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
 	if (valueFromPlayer < calFloatValue || valueFromPlayer > altFloatValue) {
-		fn_enforce_cvar(id, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		fn_enforce_cvar(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+	} else {
+		// Cvar is valid - reset enforcement tracking for this cvar
+		fn_reset_enforce_tracking(id, cvar_index)
+	}
+}
+
+// Reset enforcement tracking when cvar becomes valid
+stock fn_reset_enforce_tracking(id, cvar_index) {
+	if (gi_enforce_attempts[id][cvar_index] > 0) {
+		gi_enforce_attempts[id][cvar_index] = 0
+		gb_filterstuff_warned[id][cvar_index] = false
 	}
 }
 
@@ -511,9 +546,69 @@ public fn_checkaltallowed(id, const s_CVARNAME[], Float: valueFromPlayer, Float:
 // ENFORCEMENT & PUNISHMENT
 // ============================================================================
 
-public fn_enforce_cvar(id, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
+public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
 	if (gb_StopChecking[id])
 		return PLUGIN_CONTINUE
+
+	// Increment enforcement attempt counter
+	gi_enforce_attempts[id][cvar_index]++
+
+	// Get player info (needed for both warning and normal enforcement)
+	get_user_name(id, gs_logname, charsmax(gs_logname))
+	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
+
+	if (gs_logname[0] == 0 || gs_logauthid[0] == 0) {
+		log_amx("[%s] WARNING: Player %d disconnected before logging violation", gs_PLUGIN, id)
+		return PLUGIN_CONTINUE
+	}
+
+	// Check if enforcement is being blocked (likely cl_filterstuffcmd 1)
+	if (gi_enforce_attempts[id][cvar_index] >= MAX_ENFORCE_ATTEMPTS) {
+		// Only show warning once per cvar until player fixes it
+		if (!gb_filterstuff_warned[id][cvar_index]) {
+			gb_filterstuff_warned[id][cvar_index] = true
+
+			// Send warning to the player
+			client_print(id, print_chat, "")
+			client_print(id, print_chat, "[KTP] ========== CVAR ENFORCEMENT BLOCKED ==========")
+			client_print(id, print_chat, "[KTP] You need to set cl_filterstuffcmd to 0")
+			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.2f, required: %.2f)", s_CVARNAME, valueFromPlayer, calFloatValue)
+			client_print(id, print_chat, "[KTP] Unless you change cl_filterstuffcmd to 0, or manually")
+			client_print(id, print_chat, "[KTP] adjust %s, you are unable to participate in this", s_CVARNAME)
+			client_print(id, print_chat, "[KTP] match by KTP rules.")
+			client_print(id, print_chat, "[KTP] ================================================")
+			client_print(id, print_chat, "")
+
+			// Also show in console with more detail
+			client_print(id, print_console, "")
+			client_print(id, print_console, "========== KTP CVAR ENFORCEMENT BLOCKED ==========")
+			client_print(id, print_console, "Your client is blocking server cvar corrections.")
+			client_print(id, print_console, "This is typically caused by cl_filterstuffcmd 1")
+			client_print(id, print_console, "")
+			client_print(id, print_console, "VIOLATION: %s", s_CVARNAME)
+			client_print(id, print_console, "  Your value:    %.3f", valueFromPlayer)
+			client_print(id, print_console, "  Required:      %.3f", calFloatValue)
+			client_print(id, print_console, "")
+			client_print(id, print_console, "TO FIX: Type in console:")
+			client_print(id, print_console, "  cl_filterstuffcmd 0")
+			client_print(id, print_console, "  %s %.3f", s_CVARNAME, calFloatValue)
+			client_print(id, print_console, "")
+			client_print(id, print_console, "Until this is resolved, you cannot participate")
+			client_print(id, print_console, "in competitive matches per KTP rules.")
+			client_print(id, print_console, "==================================================")
+			client_print(id, print_console, "")
+
+			// Log this escalation
+			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %.2f) after %d attempts",
+				gs_PLUGIN, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue, gi_enforce_attempts[id][cvar_index])
+
+			// Announce to all players that this player is blocked
+			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot participate until fixed", gs_PLUGIN, gs_logname, s_CVARNAME)
+		}
+		// Don't spam - just silently skip further enforcement attempts
+		return PLUGIN_CONTINUE
+	}
 
 	new bool:is_pitch = equal(s_CVARNAME, gs_pitch)
 
@@ -535,112 +630,30 @@ public fn_enforce_cvar(id, const s_CVARNAME[], Float: valueFromPlayer, Float: ca
 		client_cmd(id, "%s %.3f", s_CVARNAME, calFloatValue)
 	}
 
-	// Get player info
-	get_user_name(id, gs_logname, charsmax(gs_logname))
-	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
-	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
-
-	if (gs_logname[0] == 0 || gs_logauthid[0] == 0) {
-		log_amx("[%s] WARNING: Player %d disconnected before logging violation", gs_PLUGIN, id)
-		return PLUGIN_CONTINUE
-	}
-
 	// Log violation
 	log_amx("%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
 
 	// Announce to all players
 	client_print(0, print_chat, "[%s] %s had invalid %s (%.2f) - corrected to %.2f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
-	// Send Discord webhook if enabled
-	if (get_pcvar_num(gp_discord_enabled)) {
-		fn_send_discord_webhook(gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
+	// Send to Discord audit (using shared ktp_discord.inc)
+	if (ktp_discord_is_enabled()) {
+		new description[384]
+		formatex(description, charsmax(description),
+			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n**Cvar:** %s^n**Value:** %.3f^n**Corrected:** %.3f",
+			gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
+		ktp_discord_send_embed_audit("CVAR Violation", description, KTP_DISCORD_COLOR_ORANGE)
 	}
 
 	return PLUGIN_CONTINUE
 }
 
 // ============================================================================
-// DISCORD WEBHOOK LOGGING
+// DISCORD INTEGRATION
 // ============================================================================
-
-public fn_send_discord_webhook(const name[], const authid[], const ip[], const cvar[], Float:player_value, Float:correct_value) {
-	// Get webhook URL
-	get_pcvar_string(gp_discord_webhook, gs_discord_webhook, charsmax(gs_discord_webhook))
-
-	// Validate webhook URL
-	if (gs_discord_webhook[0] == 0) {
-		log_amx("[%s] ERROR: Discord webhook enabled but URL not configured", gs_PLUGIN)
-		return
-	}
-
-	// Build Discord embed JSON
-	new json[2048]
-	new hostname[64], timestamp[32]
-	get_cvar_string("hostname", hostname, charsmax(hostname))
-	fn_get_iso_timestamp(timestamp, charsmax(timestamp))
-
-	// Escape quotes in strings for JSON
-	new safe_name[64], safe_cvar[64], safe_hostname[128]
-	fn_escape_json(name, safe_name, charsmax(safe_name))
-	fn_escape_json(cvar, safe_cvar, charsmax(safe_cvar))
-	fn_escape_json(hostname, safe_hostname, charsmax(safe_hostname))
-
-	// Build JSON payload in parts
-	new temp[512]
-	formatex(json, charsmax(json), "{^"embeds^":[{^"title^":^"CVAR Violation Detected^",^"color^":15158332,^"fields^":[")
-	formatex(temp, charsmax(temp), "{^"name^":^"Player^",^"value^":^"%s^",^"inline^":true},", safe_name)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "{^"name^":^"SteamID^",^"value^":^"%s^",^"inline^":true},", authid)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "{^"name^":^"IP^",^"value^":^"%s^",^"inline^":true},", ip)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "{^"name^":^"Cvar^",^"value^":^"%s^",^"inline^":true},", safe_cvar)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "{^"name^":^"Player Value^",^"value^":^"%.3f^",^"inline^":true},", player_value)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "{^"name^":^"Correct Value^",^"value^":^"%.3f^",^"inline^":true}", correct_value)
-	add(json, charsmax(json), temp)
-	formatex(temp, charsmax(temp), "],^"footer^":{^"text^":^"%s^"},^"timestamp^":^"%s^"}]}", safe_hostname, timestamp)
-	add(json, charsmax(json), temp)
-
-	// Save JSON to temp file
-	new temp_file[128]
-	get_configsdir(temp_file, charsmax(temp_file))
-	format(temp_file, charsmax(temp_file), "%s/discord_payload.json", temp_file)
-
-	new file = fopen(temp_file, "wt")
-	if (file) {
-		fputs(file, json)
-		fclose(file)
-
-		// Execute curl command in background
-		new curl_cmd[512]
-		formatex(curl_cmd, charsmax(curl_cmd), "curl -X POST -H ^"Content-Type: application/json^" -d @^"%s^" ^"%s^" > /dev/null 2>&1 &", temp_file, gs_discord_webhook)
-		server_cmd(curl_cmd)
-	}
-	else {
-		log_amx("[%s] ERROR: Failed to create Discord payload file", gs_PLUGIN)
-	}
-}
-
-// Escape special characters for JSON
-public fn_escape_json(const input[], output[], maxlen) {
-	new i = 0, j = 0
-	while (input[i] && j < maxlen - 2) {
-		if (input[i] == 34 || input[i] == 92) {  // 34 = quote, 92 = backslash
-			output[j++] = 92  // backslash
-		}
-		output[j++] = input[i++]
-	}
-	output[j] = 0
-}
-
-// Get ISO 8601 timestamp for Discord
-stock fn_get_iso_timestamp(output[], maxlen) {
-	new timestamp_str[32]
-	get_time("%Y-%m-%dT%H:%M:%SZ", timestamp_str, charsmax(timestamp_str))
-	copy(output, maxlen, timestamp_str)
-}
+// Discord webhook logging now handled by ktp_discord.inc
+// Config loaded from discord.ini via ktp_discord_load_config()
+// Messages sent via ktp_discord_send_embed_audit()
 
 /* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
  *{\\ rtf1\\ ansi\\ deff0{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ lang1033\\ f0\\ fs16 \n\\ par }
