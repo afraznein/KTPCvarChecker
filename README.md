@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Priority-based client-side cvar enforcement system for competitive Day of Defeat servers**
+**Version 7.7** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
 
 Pure enforcement anti-cheat system that monitors 59 client cvars using a priority-based query system to prevent graphics exploits, wallhacks, sound advantages, and movement cheats. Features periodic monitoring via KTPAMXX's `client_cvar_changed` callback, automatic correction, comprehensive logging, and optional Discord webhooks.
 
@@ -228,11 +228,10 @@ public fn_enforce_cvar(id, const cvar[], Float:player_value, Float:correct_value
 ### 📊 Discord Webhook Integration
 
 **Configuration:**
-```cfg
-// Enable Discord logging
-fcos_discord_enabled "1"
-fcos_discord_webhook "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
-```
+
+Discord integration is handled via the shared `ktp_discord.inc` library. Configuration is loaded from `discord.ini` in the configs directory (same as other KTP plugins).
+
+See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup instructions.
 
 **Webhook Payload (Discord Embed):**
 ```json
@@ -315,7 +314,7 @@ L 11/28/2025 - 14:32:18: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 19
 
 ### ktp_cvar.sma - Core Enforcement Engine
 
-**Version:** 7.5 (2025-12-08)
+**Version:** 7.7 (2025-12-21)
 **File Size:** ~630 lines
 **Purpose:** Priority-based client cvar monitoring using periodic queries + KTPAMXX's client_cvar_changed callback
 
@@ -388,12 +387,7 @@ ktp_cvar.amxx
 
 ### Step 4: Configure Settings (Optional)
 
-Create `<configsdir>/ktp_cvar.cfg`:
-```cfg
-// Discord webhook (optional)
-fcos_discord_enabled "0"                         // 1 = enabled
-fcos_discord_webhook ""                          // Your Discord webhook URL
-```
+Discord webhooks are configured via `discord.ini` in the configs directory (shared with other KTP plugins). See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
 
 ### Step 5: Restart Server
 
@@ -409,7 +403,7 @@ amx_plugins reload ktp_cvar.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 7.5
+// KTP Cvar Checker version 7.7
 
 // Check AMX logs on startup
 // Should show:
@@ -501,13 +495,10 @@ ktp_cvar_version
 **Configure Discord Webhooks (Optional):**
 
 1. Create a Discord webhook in your server
-2. Edit `ktp_cvar.cfg`:
-   ```cfg
-   fcos_discord_enabled "1"
-   fcos_discord_webhook "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
-   ```
-3. Restart server or reload plugin
-4. Violations will now appear as rich embeds in Discord
+2. Configure `discord.ini` in your configs directory (shared with other KTP plugins)
+3. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup instructions
+4. Restart server or reload plugin
+5. Violations will now appear as rich embeds in Discord
 
 **Monitor Violations:**
 ```bash
@@ -533,7 +524,7 @@ cat <logsdir>/L1128.log | grep "KTP Cvar"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 7.5
+// KTP Cvar Checker version 7.7
 ```
 
 **If You Receive Violations:**
@@ -597,6 +588,20 @@ fcos_discord_webhook "YOUR_WEBHOOK"   // Your Discord webhook URL
 ---
 
 ## 📝 Version History
+
+### v7.7 (2025-12-21) - Shared Discord Config
+- 🔧 **CHANGED: Discord integration** - Now uses `ktp_discord.inc` shared library
+- 🔧 **CHANGED: Config location** - Discord config loaded from `discord.ini` (same as other KTP plugins)
+- 🗑️ **REMOVED: fcos_discord_enabled cvar** - Replaced by shared config
+- 🗑️ **REMOVED: fcos_discord_webhook cvar** - Replaced by shared config
+- 🗑️ **REMOVED: Direct webhook code** - Replaced with relay pattern
+
+### v7.6 (2025-12-20) - cl_filterstuffcmd Detection
+- ✅ **ADDED: Enforcement attempt tracking** - Tracks failed attempts per player per cvar
+- ✅ **ADDED: cl_filterstuffcmd warning** - After 3 failed attempts, shows detailed warning
+- ✅ **ADDED: Public announcement** - All players see when enforcement is blocked
+- 🔧 **CHANGED: Spam prevention** - Stops chat spam after warning shown once per cvar
+- 🔧 **CHANGED: Tracking reset** - Resets when player fixes the cvar value
 
 ### v7.5 (2025-12-08) - Timing Fixes and Debug Improvements
 - 🔧 **FIXED: fn_servermessage() timing** - Moved from plugin_init() to plugin_cfg() for proper execution order
@@ -691,11 +696,10 @@ fcos_discord_webhook "YOUR_WEBHOOK"   // Your Discord webhook URL
 **Problem:** Violations not appearing in Discord
 
 **Solutions:**
-- ✅ Verify `fcos_discord_enabled` is set to `1`
-- ✅ Verify `fcos_discord_webhook` contains valid webhook URL
-- ✅ Check AMX logs for "Discord payload file" errors
-- ✅ Verify `curl` is installed and accessible from server
-- ✅ Test webhook manually: `curl -X POST -H "Content-Type: application/json" -d '{"content":"test"}' YOUR_WEBHOOK_URL`
+- ✅ Verify `discord.ini` is properly configured in configs directory
+- ✅ Verify Discord Relay service is running and accessible
+- ✅ Check AMX logs for Discord-related errors
+- ✅ See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) troubleshooting guide
 
 ### False Positives
 
@@ -765,11 +769,8 @@ See [LICENSE](LICENSE) file for details
 ### For Competitive Leagues
 
 **Recommended Settings:**
-```cfg
-// Enable Discord webhooks for real-time monitoring
-fcos_discord_enabled "1"
-fcos_discord_webhook "YOUR_WEBHOOK_URL"
-```
+
+Configure Discord webhooks via `discord.ini` for real-time monitoring. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
 
 **Best Practices:**
 - ✅ Announce enforcement in league rules

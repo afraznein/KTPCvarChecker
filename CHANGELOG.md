@@ -2,6 +2,37 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.7] - 2025-12-21
+
+### Shared Discord Config
+
+**Changed:**
+- Now uses `ktp_discord.inc` for Discord integration
+- Config now loaded from `discord.ini` (same as other KTP plugins)
+
+**Removed:**
+- `fcos_discord_enabled` cvar (replaced by shared config)
+- `fcos_discord_webhook` cvar (replaced by shared config)
+- Direct webhook code (replaced with relay pattern)
+
+---
+
+## [7.6] - 2025-12-20
+
+### cl_filterstuffcmd Detection and Warning System
+
+**Added:**
+- Enforcement attempt tracking per player per cvar
+- After 3 failed enforcement attempts, shows detailed warning message
+- Warning explains `cl_filterstuffcmd` must be 0 and how to fix
+- Announcement to all players when enforcement is blocked
+
+**Changed:**
+- Stops spamming chat after warning is shown once per cvar
+- Resets tracking when player fixes the cvar value
+
+---
+
 ## [7.5] - 2025-12-08
 
 ### Timing Fixes and Debug Improvements
