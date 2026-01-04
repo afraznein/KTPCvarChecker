@@ -2,10 +2,12 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.7
- *   Release Date:      2025-12-20
+ *   Current Version:   7.8
+ *   Release Date:      2025-12-31
  *
  *   Changelog:
+ *   7.8 2025-12-31 - Debug log cleanup
+ *                    - REMOVED: fn_msginitial() debug logging (no longer needed)
  *   7.7 2025-12-20 - Shared Discord config via ktp_discord.inc
  *                    * CHANGED: Now uses ktp_discord.inc for Discord integration
  *                    * CHANGED: Config now loaded from discord.ini (same as other KTP plugins)
@@ -68,7 +70,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.7";
+new const gs_VERSION[] = "7.8";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 
@@ -317,20 +319,12 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 // ============================================================================
 
 public fn_msginitial(id) {
-	log_amx("[KTP DEBUG] fn_msginitial called for player %d", id)
-
-	if (!is_user_connected(id)) {
-		log_amx("[KTP DEBUG] fn_msginitial: player %d not connected, aborting", id)
+	if (!is_user_connected(id))
 		return
-	}
 
 	get_user_name(id, gs_logname, 31)
-	log_amx("[KTP DEBUG] fn_msginitial: player name = %s", gs_logname)
 
-	client_print(id, print_chat,    "%s version %s by %s - Real-time cvar validation active", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
-	client_print(id, print_console, "%s version %s by %s - KTP AMX Real-time Mode", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
-
-	log_amx("[KTP DEBUG] fn_msginitial: client_print calls completed for player %d", id)
+	client_print(id, print_chat, "%s version %s by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 }
 
 public client_putinserver(id) {
@@ -435,7 +429,6 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[])
 public fn_firstcomplete(id) {
 	if (!gb_FirstCheckComplete[id]) {
 		gb_FirstCheckComplete[id] = true
-		client_print(id, print_chat, "[%s] Initial check complete - Real-time monitoring active", gs_PLUGIN)
 	}
 }
 

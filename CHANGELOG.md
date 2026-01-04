@@ -2,6 +2,16 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.8] - 2026-01
+
+### Deployment Update
+
+**Changed:**
+- Version bump for live server deployment
+- Tested with KTPAMXX v2.6.2
+
+---
+
 ## [7.7] - 2025-12-21
 
 ### Shared Discord Config
