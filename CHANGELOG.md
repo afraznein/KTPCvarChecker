@@ -2,13 +2,26 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
-## [7.8] - 2026-01
+## [7.9] - 2026-01-09
 
-### Deployment Update
+### Discord Toggle
+
+**Added:**
+- `ktp_cvar_discord` cvar (0/1) to disable Discord logging for cvar checker
+- Default: 0 (disabled) to reduce Discord webhook spam
+- Separate from global discord.ini - allows disabling cvar spam specifically
 
 **Changed:**
-- Version bump for live server deployment
-- Tested with KTPAMXX v2.6.2
+- Startup message now shows Discord status
+
+---
+
+## [7.8] - 2025-12-31
+
+### Debug Log Cleanup
+
+**Removed:**
+- `fn_msginitial()` debug logging (no longer needed)
 
 ---
 

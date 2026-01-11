@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.7** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
+**Version 7.9** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
 
 Pure enforcement anti-cheat system that monitors 59 client cvars using a priority-based query system to prevent graphics exploits, wallhacks, sound advantages, and movement cheats. Features periodic monitoring via KTPAMXX's `client_cvar_changed` callback, automatic correction, comprehensive logging, and optional Discord webhooks.
 

@@ -2,10 +2,13 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.8
- *   Release Date:      2025-12-31
+ *   Current Version:   7.9
+ *   Release Date:      2026-01-09
  *
  *   Changelog:
+ *   7.9 2026-01-09 - Discord toggle
+ *                    + ADDED: ktp_cvar_discord cvar (0/1) to disable Discord logging
+ *                    * Default: 0 (disabled) to reduce Discord webhook spam
  *   7.8 2025-12-31 - Debug log cleanup
  *                    - REMOVED: fn_msginitial() debug logging (no longer needed)
  *   7.7 2025-12-20 - Shared Discord config via ktp_discord.inc
@@ -70,7 +73,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.8";
+new const gs_VERSION[] = "7.9";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 
@@ -110,6 +113,9 @@ new const Float: FLOAT_PRECISION = 0.00005;
 // ============================================================================
 // CVAR POINTERS
 // ============================================================================
+
+// Discord toggle (separate from global discord.ini - allows disabling cvar spam specifically)
+new gp_cvar_discord
 
 // Discord config now loaded via ktp_discord.inc
 
@@ -214,6 +220,9 @@ public plugin_init() {
 	register_plugin(gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 	register_cvar("ktp_cvar_version", gs_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
 
+	// Discord toggle - disabled by default to reduce webhook spam
+	gp_cvar_discord = register_cvar("ktp_cvar_discord", "0")
+
 	// Discord webhook logging now uses shared ktp_discord.inc
 
 	// Register /cvar command for manual cvar check
@@ -257,7 +266,7 @@ public fn_servermessage() {
 	server_print("[%s] Monitoring 59 cvars with priority-based system:", gs_PLUGIN)
 	server_print("[%s] - Priority cvars (%d): checked every %.0f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
 	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", gs_PLUGIN, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
-	server_print("[%s] Enforcement: Auto-correct + console logging + Discord webhooks", gs_PLUGIN)
+	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", gs_PLUGIN, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
 }
 
 // ============================================================================
@@ -630,7 +639,8 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 	client_print(0, print_chat, "[%s] %s had invalid %s (%.2f) - corrected to %.2f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
 	// Send to Discord audit (using shared ktp_discord.inc)
-	if (ktp_discord_is_enabled()) {
+	// Only if ktp_cvar_discord is enabled (disabled by default to reduce spam)
+	if (get_pcvar_num(gp_cvar_discord) && ktp_discord_is_enabled()) {
 		new description[384]
 		formatex(description, charsmax(description),
 			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n**Cvar:** %s^n**Value:** %.3f^n**Corrected:** %.3f",
