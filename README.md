@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.9** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
+**Version 7.10** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
 
 Pure enforcement anti-cheat system that monitors 59 client cvars using a priority-based query system to prevent graphics exploits, wallhacks, sound advantages, and movement cheats. Features periodic monitoring via KTPAMXX's `client_cvar_changed` callback, automatic correction, comprehensive logging, and optional Discord webhooks.
 
@@ -314,7 +314,7 @@ L 11/28/2025 - 14:32:18: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 19
 
 ### ktp_cvar.sma - Core Enforcement Engine
 
-**Version:** 7.7 (2025-12-21)
+**Version:** 7.10 (2026-01-13)
 **File Size:** ~630 lines
 **Purpose:** Priority-based client cvar monitoring using periodic queries + KTPAMXX's client_cvar_changed callback
 
@@ -403,7 +403,7 @@ amx_plugins reload ktp_cvar.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 7.7
+// KTP Cvar Checker version 7.10
 
 // Check AMX logs on startup
 // Should show:
@@ -524,7 +524,7 @@ cat <logsdir>/L1128.log | grep "KTP Cvar"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 7.7
+// KTP Cvar Checker version 7.10
 ```
 
 **If You Receive Violations:**
@@ -553,11 +553,15 @@ ktp_cvar_version
 ### For Competitive Match Admins
 
 **Pre-Match Setup:**
-```cfg
-// Recommended competitive settings
-fcos_discord_enabled "1"              // Enable Discord alerts
-fcos_discord_webhook "YOUR_WEBHOOK"   // Your Discord webhook URL
-```
+
+1. Configure `discord.ini` in configs directory (shared with other KTP plugins)
+2. Optionally enable cvar-specific Discord alerts:
+   ```cfg
+   // In server.cfg or match config
+   ktp_cvar_discord "1"    // Enable Discord logging for cvar violations (default: 0)
+   ```
+
+See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for Discord setup.
 
 **During Match:**
 - Monitor AMX logs for violations
@@ -583,11 +587,22 @@ fcos_discord_webhook "YOUR_WEBHOOK"   // Your Discord webhook URL
 - **[KTP Discord Relay](https://github.com/afraznein/DiscordRelay)** - HTTP proxy for Discord
 - **[KTP Score Parser](https://github.com/afraznein/KTPScoreBot-ScoreParser)** - Match score parsing
 - **[KTP Weekly Matches](https://github.com/afraznein/KTPScoreBot-WeeklyMatches)** - Schedule management
-- **[KTP HLTV Kicker](https://github.com/afraznein/KTPHLTVKicker)** - HLTV management
+- **[KTP HLTV Recorder](https://github.com/afraznein/KTPHLTVRecorder)** - Automatic HLTV demo recording
 
 ---
 
 ## 📝 Version History
+
+### v7.10 (2026-01-13) - Discord Branding
+- 🔧 **CHANGED: Discord embed title** - Now includes `:ktp:` emoji for consistent branding
+
+### v7.9 (2026-01-09) - Discord Toggle
+- ✅ **ADDED: ktp_cvar_discord cvar** - Toggle to disable Discord logging for cvar checker (0/1)
+- ℹ️ **Default: 0 (disabled)** - Reduces Discord webhook spam
+- ℹ️ Separate from global discord.ini - allows disabling cvar spam specifically
+
+### v7.8 (2025-12-31) - Debug Log Cleanup
+- 🗑️ **REMOVED: fn_msginitial() debug logging** - No longer needed
 
 ### v7.7 (2025-12-21) - Shared Discord Config
 - 🔧 **CHANGED: Discord integration** - Now uses `ktp_discord.inc` shared library

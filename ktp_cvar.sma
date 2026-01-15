@@ -2,10 +2,12 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.9
- *   Release Date:      2026-01-09
+ *   Current Version:   7.10
+ *   Release Date:      2026-01-13
  *
  *   Changelog:
+ *   7.10 2026-01-13 - Discord branding
+ *                    * CHANGED: Discord embed title now includes :ktp: emoji for consistent branding
  *   7.9 2026-01-09 - Discord toggle
  *                    + ADDED: ktp_cvar_discord cvar (0/1) to disable Discord logging
  *                    * Default: 0 (disabled) to reduce Discord webhook spam
@@ -73,7 +75,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.9";
+new const gs_VERSION[] = "7.10";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2025;
 
@@ -645,7 +647,7 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 		formatex(description, charsmax(description),
 			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n**Cvar:** %s^n**Value:** %.3f^n**Corrected:** %.3f",
 			gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
-		ktp_discord_send_embed_audit("CVAR Violation", description, KTP_DISCORD_COLOR_ORANGE)
+		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Violation", description, KTP_DISCORD_COLOR_ORANGE)
 	}
 
 	return PLUGIN_CONTINUE

@@ -2,6 +2,15 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.10] - 2026-01-13
+
+### Discord Branding
+
+**Changed:**
+- Discord embed title now includes `:ktp:` emoji for consistent branding
+
+---
+
 ## [7.9] - 2026-01-09
 
 ### Discord Toggle
