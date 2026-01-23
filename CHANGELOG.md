@@ -2,6 +2,20 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.11] - 2026-01-20
+
+### Discord Notification Grouping
+
+**Changed:**
+- Group all cvar violations into single Discord embed per player (reduces spam)
+- `ktp_cvar_discord` now defaults to 1 (enabled)
+
+**Added:**
+- Track repeat violations with count per cvar in grouped notification
+- 5-second timed window before sending grouped notification
+
+---
+
 ## [7.10] - 2026-01-13
 
 ### Discord Branding

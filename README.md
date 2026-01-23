@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.10** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
+**Version 7.11** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
 
 Pure enforcement anti-cheat system that monitors 59 client cvars using a priority-based query system to prevent graphics exploits, wallhacks, sound advantages, and movement cheats. Features periodic monitoring via KTPAMXX's `client_cvar_changed` callback, automatic correction, comprehensive logging, and optional Discord webhooks.
 
@@ -314,7 +314,7 @@ L 11/28/2025 - 14:32:18: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 19
 
 ### ktp_cvar.sma - Core Enforcement Engine
 
-**Version:** 7.10 (2026-01-13)
+**Version:** 7.11 (2026-01-20)
 **File Size:** ~630 lines
 **Purpose:** Priority-based client cvar monitoring using periodic queries + KTPAMXX's client_cvar_changed callback
 
@@ -403,7 +403,7 @@ amx_plugins reload ktp_cvar.amxx
 ktp_cvar_version
 
 // Should output:
-// KTP Cvar Checker version 7.10
+// KTP Cvar Checker version 7.11
 
 // Check AMX logs on startup
 // Should show:
@@ -524,7 +524,7 @@ cat <logsdir>/L1128.log | grep "KTP Cvar"
 ktp_cvar_version
 
 // Should see:
-// KTP Cvar Checker version 7.10
+// KTP Cvar Checker version 7.11
 ```
 
 **If You Receive Violations:**
@@ -558,7 +558,7 @@ ktp_cvar_version
 2. Optionally enable cvar-specific Discord alerts:
    ```cfg
    // In server.cfg or match config
-   ktp_cvar_discord "1"    // Enable Discord logging for cvar violations (default: 0)
+   ktp_cvar_discord "1"    // Enable Discord logging for cvar violations (default: 1)
    ```
 
 See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for Discord setup.
@@ -593,12 +593,18 @@ See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for Discord s
 
 ## 📝 Version History
 
+### v7.11 (2026-01-20) - Discord Notification Grouping
+- 🔧 **CHANGED: Discord notifications** - Group all cvar violations into single Discord embed per player
+- ✅ **ADDED: Repeat violation tracking** - Shows count per cvar in grouped notification
+- ✅ **ADDED: 5-second batching window** - Violations collected before sending single notification
+- 🔧 **CHANGED: ktp_cvar_discord default** - Now defaults to 1 (enabled)
+
 ### v7.10 (2026-01-13) - Discord Branding
 - 🔧 **CHANGED: Discord embed title** - Now includes `:ktp:` emoji for consistent branding
 
 ### v7.9 (2026-01-09) - Discord Toggle
 - ✅ **ADDED: ktp_cvar_discord cvar** - Toggle to disable Discord logging for cvar checker (0/1)
-- ℹ️ **Default: 0 (disabled)** - Reduces Discord webhook spam
+- ℹ️ **Default: 1 (enabled)** - With notification grouping to reduce spam
 - ℹ️ Separate from global discord.ini - allows disabling cvar spam specifically
 
 ### v7.8 (2025-12-31) - Debug Log Cleanup

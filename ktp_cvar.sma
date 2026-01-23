@@ -2,10 +2,16 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.10
- *   Release Date:      2026-01-13
+ *   Current Version:   7.11
+ *   Release Date:      2026-01-20
  *
  *   Changelog:
+ *   7.11 2026-01-20 - Discord notification grouping
+ *                    + CHANGED: Group all cvar violations into single Discord embed per player
+ *                    + ADDED: Track repeat violations with count per cvar
+ *                    + ADDED: 5-second timed window before sending grouped notification
+ *                    + CHANGED: ktp_cvar_discord now defaults to 1 (enabled)
+ *                    * Matches KTPFileChecker v2.3 grouping technique
  *   7.10 2026-01-13 - Discord branding
  *                    * CHANGED: Discord embed title now includes :ktp: emoji for consistent branding
  *   7.9 2026-01-09 - Discord toggle
@@ -75,9 +81,9 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.10";
+new const gs_VERSION[] = "7.11";
 new const gs_AUTHOR[] = "Nein_";
-new const gs_year     = 2025;
+new const gs_year     = 2026;
 
 // ============================================================================
 // CONSTANTS & DEFINES
@@ -111,6 +117,11 @@ new const Float: FLOAT_PRECISION = 0.00005;
 
 // Priority cvar count
 #define PRIORITY_CVARS_COUNT 9
+
+// Discord notification grouping
+#define DISCORD_DELAY 5.0          // Delay to batch violations before sending Discord
+#define MAX_CVAR_VIOLATIONS 32     // Max unique cvars to buffer per player
+#define MAX_CVAR_NAME_LEN 32       // Max cvar name length
 
 // ============================================================================
 // CVAR POINTERS
@@ -151,6 +162,18 @@ new gs_fcosconfigfile[128]
 new gs_logname[32]
 new gs_logauthid[35]
 new gs_logip[16]
+
+// Discord violation buffering for grouped notifications
+new g_discordPlayerId
+new g_discordPlayerName[32]
+new g_discordPlayerAuthid[35]
+new g_discordPlayerIp[22]
+new g_discordCvarNames[MAX_CVAR_VIOLATIONS][MAX_CVAR_NAME_LEN]
+new Float:g_discordCvarValues[MAX_CVAR_VIOLATIONS]      // Player's bad value
+new Float:g_discordCvarCorrected[MAX_CVAR_VIOLATIONS]   // Corrected to value
+new g_discordCvarCounts[MAX_CVAR_VIOLATIONS]            // Repeat count per cvar
+new g_discordViolationCount                              // Unique cvars in buffer
+new bool:g_discordPending
 
 // ============================================================================
 // CVAR CHECKING ARRAYS
@@ -222,8 +245,8 @@ public plugin_init() {
 	register_plugin(gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 	register_cvar("ktp_cvar_version", gs_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
 
-	// Discord toggle - disabled by default to reduce webhook spam
-	gp_cvar_discord = register_cvar("ktp_cvar_discord", "0")
+	// Discord toggle - enabled by default (now uses grouped notifications to reduce spam)
+	gp_cvar_discord = register_cvar("ktp_cvar_discord", "1")
 
 	// Discord webhook logging now uses shared ktp_discord.inc
 
@@ -640,17 +663,116 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 	// Announce to all players
 	client_print(0, print_chat, "[%s] %s had invalid %s (%.2f) - corrected to %.2f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
-	// Send to Discord audit (using shared ktp_discord.inc)
+	// Buffer violation for grouped Discord notification
 	// Only if ktp_cvar_discord is enabled (disabled by default to reduce spam)
 	if (get_pcvar_num(gp_cvar_discord) && ktp_discord_is_enabled()) {
-		new description[384]
-		formatex(description, charsmax(description),
-			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n**Cvar:** %s^n**Value:** %.3f^n**Corrected:** %.3f",
-			gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
-		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Violation", description, KTP_DISCORD_COLOR_ORANGE)
+		buffer_discord_violation(id, s_CVARNAME, valueFromPlayer, calFloatValue)
 	}
 
 	return PLUGIN_CONTINUE
+}
+
+// ============================================================================
+// DISCORD NOTIFICATION BUFFERING
+// ============================================================================
+
+/**
+ * Buffer a cvar violation for grouped Discord notification
+ * Groups multiple violations per player into a single embed
+ * Tracks repeat violations with count
+ */
+stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:corrected_value) {
+	// Check if this is a new player or same player
+	if (g_discordPlayerId != id) {
+		// Send any pending violations for previous player
+		if (g_discordPending) {
+			send_discord_violations()
+		}
+
+		// Start buffering for new player
+		g_discordPlayerId = id
+		copy(g_discordPlayerName, charsmax(g_discordPlayerName), gs_logname)
+		copy(g_discordPlayerAuthid, charsmax(g_discordPlayerAuthid), gs_logauthid)
+		copy(g_discordPlayerIp, charsmax(g_discordPlayerIp), gs_logip)
+		g_discordViolationCount = 0
+	}
+
+	// Check if this cvar is already in the buffer (repeat violation)
+	new cvar_index = -1
+	for (new i = 0; i < g_discordViolationCount; i++) {
+		if (equal(g_discordCvarNames[i], cvar_name)) {
+			cvar_index = i
+			break
+		}
+	}
+
+	if (cvar_index >= 0) {
+		// Existing cvar - increment count and update values
+		g_discordCvarCounts[cvar_index]++
+		g_discordCvarValues[cvar_index] = player_value
+		g_discordCvarCorrected[cvar_index] = corrected_value
+	} else if (g_discordViolationCount < MAX_CVAR_VIOLATIONS) {
+		// New cvar - add to buffer
+		copy(g_discordCvarNames[g_discordViolationCount], MAX_CVAR_NAME_LEN - 1, cvar_name)
+		g_discordCvarValues[g_discordViolationCount] = player_value
+		g_discordCvarCorrected[g_discordViolationCount] = corrected_value
+		g_discordCvarCounts[g_discordViolationCount] = 1
+		g_discordViolationCount++
+	}
+
+	// Schedule Discord send (will be called after violations settle)
+	if (!g_discordPending) {
+		g_discordPending = true
+		set_task(DISCORD_DELAY, "send_discord_violations")
+	}
+}
+
+/**
+ * Send buffered violations as a single grouped Discord embed
+ */
+public send_discord_violations() {
+	g_discordPending = false
+
+	if (g_discordViolationCount == 0)
+		return
+
+	// Build description with all cvars
+	new description[1024]
+	new pos = 0
+
+	// Calculate total violations (sum of all counts)
+	new total_violations = 0
+	for (new i = 0; i < g_discordViolationCount; i++) {
+		total_violations += g_discordCvarCounts[i]
+	}
+
+	pos += formatex(description[pos], charsmax(description) - pos,
+		"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n**Violations (%d total, %d unique):**^n",
+		g_discordPlayerName, g_discordPlayerAuthid, g_discordPlayerIp, total_violations, g_discordViolationCount)
+
+	// Add cvar list
+	for (new i = 0; i < g_discordViolationCount && pos < charsmax(description) - 100; i++) {
+		if (g_discordCvarCounts[i] > 1) {
+			// Repeat violation - show count
+			pos += formatex(description[pos], charsmax(description) - pos,
+				"• **%s** (x%d): %.3f → %.3f^n",
+				g_discordCvarNames[i], g_discordCvarCounts[i],
+				g_discordCvarValues[i], g_discordCvarCorrected[i])
+		} else {
+			// Single violation
+			pos += formatex(description[pos], charsmax(description) - pos,
+				"• **%s**: %.3f → %.3f^n",
+				g_discordCvarNames[i],
+				g_discordCvarValues[i], g_discordCvarCorrected[i])
+		}
+	}
+
+	// Send to audit channel
+	ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Violations", description, KTP_DISCORD_COLOR_ORANGE)
+
+	// Reset buffer
+	g_discordPlayerId = 0
+	g_discordViolationCount = 0
 }
 
 // ============================================================================
