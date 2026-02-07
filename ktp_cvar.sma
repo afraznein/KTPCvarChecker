@@ -81,7 +81,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.11";
+new const gs_VERSION[] = "7.12";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2026;
 
@@ -575,6 +575,11 @@ stock fn_reset_enforce_tracking(id, cvar_index) {
 
 public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
 	if (gb_StopChecking[id])
+		return PLUGIN_CONTINUE
+
+	// Skip hud_takesshots enforcement for non-competitive matches (12man, scrim, draft)
+	// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
+	if (equal(s_CVARNAME, "hud_takesshots") && get_cvar_num("ktp_match_competitive") == 0)
 		return PLUGIN_CONTINUE
 
 	// Increment enforcement attempt counter

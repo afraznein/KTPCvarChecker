@@ -1,811 +1,90 @@
 # KTP Cvar Checker
 
-**Version 7.11** - Priority-based client-side cvar enforcement system for competitive Day of Defeat servers
+**Version 7.12** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
-Pure enforcement anti-cheat system that monitors 59 client cvars using a priority-based query system to prevent graphics exploits, wallhacks, sound advantages, and movement cheats. Features periodic monitoring via KTPAMXX's `client_cvar_changed` callback, automatic correction, comprehensive logging, and optional Discord webhooks.
+Pure enforcement anti-cheat that monitors 59 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
-Originally based on SubStream's "Force CAL Open Settings" (fcos), heavily modified and optimized for KTP competitive infrastructure.
+Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
----
-
-## 🎯 Purpose
-
-Competitive first-person shooters require strict enforcement of client settings to prevent unfair advantages:
-- ❌ Graphics exploits (r_fullbright, gl_* settings for wallhacks)
-- ❌ Audio advantages (s_show to see sound origins)
-- ❌ Movement exploits (m_pitch/m_side manipulation)
-- ❌ Network advantages (cl_updaterate, rate manipulation)
-- ❌ Manual admin monitoring is time-consuming and inconsistent
-- ❌ Players can change cvars mid-match without detection
-
-**KTP Cvar Checker enforces fair play automatically:**
-- ✅ Monitors 59 critical cvars continuously
-- ✅ **Priority-based detection** - Critical cvars checked every 2 seconds, others rotated every 10 seconds
-- ✅ **Automatic cvar correction** on every violation
-- ✅ **Complete audit trail** in AMX logs
-- ✅ **Optional Discord webhooks** for violation alerts
-- ✅ **Pure enforcement** - no punishments, just auto-correction
-- ✅ **Low overhead** - ~5 queries/second per player (~0.4% CPU, ~8 KB/s network)
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  KTP Cvar Checker (AMX Plugin)                  │
-│  - Periodically queries cvars via query_client_cvar() │
-│    * Priority cvars: every 2 seconds (9 cvars)  │
-│    * Standard cvars: rotating every 10s (50 cvars) │
-└────────────────┬────────────────────────────────┘
-                 │ svc_sendcvarvalue2 message
-                 ↓
-┌─────────────────────────────────────────────────┐
-│  Game Client                                    │
-│  - Receives cvar query from server              │
-│  - Sends back current value                     │
-└────────────────┬────────────────────────────────┘
-                 │ clc_cvarvalue2 response packet
-                 ↓
-┌─────────────────────────────────────────────────┐
-│  KTP-ReHLDS (Modified Engine)                   │
-│  - SV_ParseCvarValue2() receives response       │
-│  - Calls pfnClientCvarChanged callback          │
-└────────────────┬────────────────────────────────┘
-                 │ C++ callback
-                 ↓
-┌─────────────────────────────────────────────────┐
-│  KTPAMXX (Modified AMX Mod X)                   │
-│  - Receives pfnClientCvarChanged from ReHLDS    │
-│  - Fires client_cvar_changed() forward to       │
-│    loaded AMX plugins                           │
-└────────────────┬────────────────────────────────┘
-                 │ AMXX Forward
-                 ↓
-┌─────────────────────────────────────────────────┐
-│  KTP Cvar Checker (AMX Plugin)                  │
-│  - client_cvar_changed() callback triggered     │
-│  - Rate limiting (1 check/sec per player)       │
-│  - Validates cvar against whitelist (59 cvars)  │
-│  - Detects: m_pitch is "0.05" (required: "0.022") │
-│  - Forces correct value via client_cmd          │
-│  - Logs violation to AMX logs                   │
-│  - Sends Discord webhook (if enabled)           │
-│  - Announces correction to all players          │
-└─────────────────────────────────────────────────┘
+KTP Cvar Checker: queries cvars periodically
+     |  Priority (9 cvars): every 2 seconds
+     |  Standard (50 cvars): rotated every 10 seconds (5 per check)
+     v
+Game Client: responds with current cvar value
+     v
+KTP-ReHLDS: pfnClientCvarChanged callback
+     v
+KTPAMXX: client_cvar_changed forward
+     v
+KTP Cvar Checker: validates, enforces, logs, Discord alert
 ```
 
-**Detection Speed:**
-- **Priority cvars (9)**: Checked every **2 seconds** (movement/network exploits)
-- **Standard cvars (50)**: Rotated every **10 seconds** (5 cvars per check, full cycle ~100 seconds)
-- **Initial check**: **~4 seconds** (parallel batches of 8 queries)
-- **Rate limiting**: Max 1 validation per second per player (prevents callback spam)
-- **Performance**: **~5 queries/second per player** (~160 q/s for 32 players)
+## Detection Speed
 
----
+| Type | Count | Interval | Worst-Case Detection |
+|------|-------|----------|---------------------|
+| Priority cvars | 9 | Every 2s | < 2 seconds |
+| Standard cvars | 50 | 5 per 10s | ~100 seconds |
+| Initial check | All 59 | Parallel batches of 8 | ~4 seconds |
 
-## ✨ Key Features
+Performance: ~5 queries/sec per player (~160 q/s for 32 players, ~0.4% CPU, ~8 KB/s network).
 
-### 🔍 Priority-Based Cvar Monitoring
+## Features
 
-**59 Monitored Cvars (9 Priority + 50 Standard):**
+- **Priority-based monitoring** — Critical cvars (movement, network) checked every 2 seconds
+- **Automatic correction** — Forces correct values immediately on violation
+- **Discord notifications** — Grouped violations per player with 5-second batching window
+- **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
+- **Dynamic hud_takesshots** — Only enforced during competitive matches (`.ktp`, `.ktpOT`)
+- **Manual check** — `/cvar` command triggers full parallel query
+- **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 
-**Priority Cvars (checked every 2 seconds):**
-```
-m_pitch             (0.022 or -0.022 - prevents pitch hacks)
-cl_yawspeed         (210 - prevents turn speed exploits)
-cl_pitchspeed       (225 - prevents pitch speed exploits)
-lightgamma          (range: 1.81-3.0 - prevents extreme brightness)
-cl_bob              (range: 0-0.011 - prevents view bob exploits)
-cl_updaterate       (range: 100-120 - network fairness)
-cl_cmdrate          (range: 100-500 - command rate limits)
-rate                (range: 100000-1000000 - connection rate)
-ex_interp           (range: 0-0.03 - interpolation settings)
-```
+## Monitored Cvars (59 total)
 
-**Standard Cvars (rotated every 10 seconds):**
+**Priority (9):** `m_pitch`, `cl_yawspeed`, `cl_pitchspeed`, `lightgamma`, `cl_bob`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`
 
-**Graphics Anti-Cheat (33 cvars):**
-```
-gl_affinemodels, gl_alphamin, gl_clear, gl_cull, gl_d3dflip,
-gl_dither, gl_keeptjunctions, gl_lightholes, gl_monolights,
-gl_nobind, gl_nocolors, gl_overbright, gl_palette_tex, gl_picmip,
-gl_playermip, gl_round_down, r_bmodelinterp, r_drawentities,
-r_drawviewmodel, r_dynamic, r_fullbright, r_glowshellfreq,
-r_lightmap, r_traceglow, r_wadtextures, texgamma, r_luminance,
-lightgamma (range: 1.81-3.0)
-```
+**Standard (50):** Graphics (33), audio (2), movement (7), gameplay (8) — see source for full list.
 
-**Audio Anti-Cheat (2 cvars):**
-```
-s_show              (0 only - prevents sound origin visualization)
-ambient_fade, ambient_level
-```
+**Range cvars (8):** `lightgamma` (1.81-3.0), `cl_smoothtime` (0-0.1), `cl_bob` (0-0.011), `cl_updaterate` (100-120), `cl_cmdrate` (100-500), `rate` (100k-1M), `ex_interp` (0-0.03), `fps_max` (60-500).
 
-**Movement Anti-Cheat (7 cvars):**
-```
-m_side              (0.8 - prevents strafe exploits)
-cl_pitchdown        (89 - pitch down limit)
-cl_pitchup          (89 - pitch up limit)
-cl_anglespeedkey    (0.67 - angle speed key multiplier)
-lookspring          (0 - look spring)
-lookstrafe          (0 - look strafe)
-cl_movespeedkey     (0.3 - movement speed key multiplier)
-```
+## Requirements
 
-**Gameplay Settings (10 cvars):**
-```
-cl_bobcycle, cl_bobup, cl_smoothtime (range: 0-0.1),
-cl_fixtimerate, cl_gaitestimation, fastsprites,
-fps_max (range: 60-500), cl_lc, cl_lw, cl_upspeed,
-cl_showevents, cl_mousegrab, hud_takesshots
-```
+- **KTPAMXX** — Custom AMX Mod X with `client_cvar_changed` forward
+- **KTP-ReHLDS** — Custom ReHLDS with `pfnClientCvarChanged` callback
+- Not compatible with standard AMX Mod X or ReHLDS
 
-### ⚡ Priority-Based Periodic Monitoring
+## Installation
 
-**How It Works:**
-```pawn
-/**
- * Priority-based cvar monitoring system
- * Actively queries cvars on a schedule to trigger detection
- */
+1. Compile: `amxxpc ktp_cvar.sma -oktp_cvar.amxx`
+2. Copy `ktp_cvar.amxx` to `addons/ktpamx/plugins/`
+3. Add to `plugins.ini`
+4. Configure `discord.ini` for Discord alerts (optional, shared with other KTP plugins)
+5. Restart server or change map
 
-// Start monitoring after initial check (10 seconds after connect)
-public fn_start_monitoring(id) {
-    // Check priority cvars every 2 seconds
-    set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id, _, _, "b")
+## Configuration
 
-    // Rotate through standard cvars every 10 seconds
-    set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id, _, _, "b")
-}
+| Cvar | Default | Description |
+|------|---------|-------------|
+| `ktp_cvar_discord` | `1` | Enable/disable Discord violation alerts |
 
-// Query all 9 priority cvars
-public fn_check_priority_cvars(id) {
-    for (new i = 0; i < PRIORITY_CVARS_COUNT; i++) {
-        query_client_cvar(id, gs_priority_cvars[i], "fn_querycvar")
-    }
-}
+Discord integration uses the shared `discord.ini` config. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
 
-// Rotate through 5 standard cvars per check
-public fn_check_standard_cvars(id) {
-    for (new i = 0; i < 5; i++) {
-        query_client_cvar(id, gs_standard_cvars[index], "fn_querycvar")
-        index++
-    }
-    // Reset when reaching end of list
-    if (index >= STANDARD_CVARS_COUNT) index = 0
-}
+## Related Projects
 
-// Callback fires when client responds (via KTPAMXX's client_cvar_changed)
-public client_cvar_changed(id, const cvar[], const value[]) {
-    // Validate and enforce if needed
-    fn_validate_and_enforce(id, cvar, value)
-}
-```
+- [KTP-ReHLDS](https://github.com/afraznein/KTPReHLDS) — Engine with pfnClientCvarChanged callback
+- [KTPAMXX](https://github.com/afraznein/KTPAMXX) — AMX Mod X with client_cvar_changed forward
+- [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) — HTTP proxy for Discord
 
-**Performance Features:**
-- ✅ **Priority-based queries** - Critical cvars checked more frequently
-- ✅ **Efficient rotation** - Standard cvars spread across time
-- ✅ **Callback-driven validation** - Uses KTPAMXX forward for responses
-- ✅ **Rate-limited** - Max 1 validation/sec per player (prevents callback spam)
-- ✅ **Recursion-safe** - Enforcement flag prevents infinite loops
-- ✅ **Pre-converted values** - All expected values converted to floats once on init
-- ✅ **Low overhead** - ~5 queries/sec per player, ~0.4% CPU usage
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-### 🔨 Automatic Enforcement
+## Credits
 
-**Pure Enforcement Mode:**
-```pawn
-public fn_enforce_cvar(id, const cvar[], Float:player_value, Float:correct_value) {
-    // Set enforcement flag to prevent recursion
-    gb_enforcing_cvar[id] = true
+- **Nein_** ([@afraznein](https://github.com/afraznein)) — KTPAMXX integration, pure enforcement redesign
+- **SubStream** — Original Force CAL Open Settings ([AlliedMods thread](http://forums.alliedmods.net/showthread.php?t=25927))
 
-    // Force correct value on client
-    if (is_pitch && (player_value < 0.0))
-        client_cmd(id, "m_pitch -0.022")
-    else if (correct_value >= 100.0)
-        client_cmd(id, "%s %d", cvar, floatround(correct_value))
-    else
-        client_cmd(id, "%s %.3f", cvar, correct_value)
+## License
 
-    // Log violation
-    log_amx("[KTP Cvar] %s | %s | %s | Invalid %s: %.3f (Required: %.3f)",
-        steamid, name, ip, cvar, player_value, correct_value)
-
-    // Send Discord webhook if enabled
-    if (get_pcvar_num(gp_discord_enabled))
-        fn_send_discord_webhook(...)
-}
-```
-
-**Enforcement Features:**
-- ✅ **Automatic correction** - Forces correct value immediately
-- ✅ **No punishments** - Pure enforcement only (no warnings, kicks, bans)
-- ✅ **Complete logging** - AMX logs include SteamID, name, IP, cvar, values
-- ✅ **Discord webhooks** - Optional real-time violation alerts
-- ✅ **Recursion prevention** - Enforcement flag prevents infinite loops
-
-### 📊 Discord Webhook Integration
-
-**Configuration:**
-
-Discord integration is handled via the shared `ktp_discord.inc` library. Configuration is loaded from `discord.ini` in the configs directory (same as other KTP plugins).
-
-See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup instructions.
-
-**Webhook Payload (Discord Embed):**
-```json
-{
-  "embeds": [{
-    "title": "CVAR Violation Detected",
-    "color": 15158332,
-    "fields": [
-      {"name": "Player", "value": "PlayerName", "inline": true},
-      {"name": "SteamID", "value": "STEAM_0:1:12345", "inline": true},
-      {"name": "IP", "value": "192.168.1.100", "inline": true},
-      {"name": "Cvar", "value": "r_fullbright", "inline": true},
-      {"name": "Player Value", "value": "1.000", "inline": true},
-      {"name": "Correct Value", "value": "0.000", "inline": true}
-    ],
-    "footer": {"text": "Server Name"},
-    "timestamp": "2025-11-28T14:32:15Z"
-  }]
-}
-```
-
-**Features:**
-- ✅ **Rich embeds** - Color-coded violation alerts
-- ✅ **Complete context** - Player info, server name, timestamp
-- ✅ **Non-blocking** - Uses cURL in background (no lag)
-- ✅ **Proper escaping** - JSON-safe string handling
-- ✅ **ISO timestamps** - Discord-compatible time format
-
-### 🎯 Smart Value Handling
-
-**Float Precision:**
-```pawn
-// Uses 0.00005 tolerance for float comparisons
-#define FLOAT_PRECISION 0.00005
-
-if (floatabs(player_value - required_value) <= FLOAT_PRECISION) {
-    // Value is acceptable
-}
-```
-
-**Range Checks:**
-```pawn
-// lightgamma must be between 1.81 and 3.0
-if (1.81 <= player_value <= 3.0) {
-    // Valid
-}
-
-// ex_interp must be between 0 and 0.03
-if (0.0 <= player_value <= 0.03) {
-    // Valid
-}
-```
-
-**Special Case - m_pitch:**
-```pawn
-// Allows both positive and negative (inverted mouse)
-if (value == 0.022 || value == -0.022) {
-    // Valid (inverted mouse is legitimate)
-}
-```
-
-### 📝 Complete Audit Trail
-
-**AMX Log Format:**
-```
-L 11/28/2025 - 14:32:15: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 192.168.1.100 | Invalid r_fullbright: 1.000 (Required: 0.000)
-L 11/28/2025 - 14:32:18: [KTP Cvar Checker] STEAM_0:1:12345678 | PlayerName | 192.168.1.100 | Invalid gl_overbright: 2.000 (Required: 0.000)
-```
-
-**Log Information:**
-- ✅ Timestamp
-- ✅ SteamID
-- ✅ Player name
-- ✅ IP address
-- ✅ Cvar name and values (actual vs required)
-
----
-
-## 🔧 Plugin Components
-
-### ktp_cvar.sma - Core Enforcement Engine
-
-**Version:** 7.11 (2026-01-20)
-**File Size:** ~630 lines
-**Purpose:** Priority-based client cvar monitoring using periodic queries + KTPAMXX's client_cvar_changed callback
-
-**Key Functions:**
-```pawn
-public plugin_init()                     // Initialize plugin, register cvars/commands
-public client_cvar_changed(id, cvar, val)// KTPAMXX forward - triggered by query responses
-public client_putinserver(id)            // Start initial check on player connect
-public fn_start_monitoring(id)           // Start periodic monitoring system
-public fn_check_priority_cvars(id)       // Query 9 priority cvars (every 2s)
-public fn_check_standard_cvars(id)       // Rotate through 50 standard cvars (every 10s)
-public fn_loopquery(id)                  // Initial parallel batch queries
-public fn_query_parallel(id)             // Send 8 queries simultaneously
-public fn_querycvar(id, cvar, value)     // Callback for query responses
-public fn_checkvalues(...)               // Validate exact value cvars
-public fn_checkaltallowed(...)           // Validate range cvars
-public fn_enforce_cvar(...)              // Force correct value + log + Discord + announce
-public cmd_manual_check(id)              // /cvar command handler
-public fn_send_discord_webhook(...)      // Send Discord embed
-```
-
-**Detection Methods:**
-- **Priority monitoring**: 9 critical cvars queried every 2 seconds (movement/network)
-- **Standard rotation**: 50 cvars rotated every 10 seconds (5 per check)
-- **Initial check**: Parallel query batches (8 at a time, ~4 seconds total)
-- **Manual check**: `/cvar` command triggers full parallel query check
-- **Callback validation**: All responses validated via `client_cvar_changed()` forward
-
-**Requirements:**
-- **KTPAMXX** (Modified AMX Mod X with `client_cvar_changed` forward)
-- **KTP-ReHLDS** (Modified ReHLDS with `pfnClientCvarChanged` callback)
-- **No backwards compatibility** - Will not work on standard AMX/ReHLDS
-
----
-
-## 🚀 Installation
-
-### Prerequisites
-
-- **KTPAMXX** - Modified AMX Mod X fork with `client_cvar_changed` forward
-- **KTP-ReHLDS** - Modified ReHLDS with `pfnClientCvarChanged` callback implementation
-- **⚠️ NOT compatible** with standard AMX Mod X or ReHLDS
-
-### Step 1: Compile Plugin
-
-```bash
-# Navigate to AMX scripting directory
-cd <basedir>/scripting
-
-# Compile plugin
-amxxpc ktp_cvar.sma -oktp_cvar.amxx
-```
-
-### Step 2: Install Plugin
-
-```bash
-# Copy compiled plugin to plugins directory
-cp ktp_cvar.amxx ../plugins/
-```
-
-### Step 3: Enable Plugin
-
-Edit `<configsdir>/plugins.ini`:
-```ini
-; KTP Cvar Checker - Anti-cheat enforcement system
-ktp_cvar.amxx
-```
-
-> **Note:** `<configsdir>` is automatically detected (e.g., `addons/ktpamx/configs/` for KTP AMX or `addons/amxmodx/configs/` for standard AMX Mod X).
-
-### Step 4: Configure Settings (Optional)
-
-Discord webhooks are configured via `discord.ini` in the configs directory (shared with other KTP plugins). See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
-
-### Step 5: Restart Server
-
-```bash
-# Restart server or reload plugin
-amx_plugins reload ktp_cvar.amxx
-```
-
-### Step 6: Verify Installation
-
-```
-// In server console or player console
-ktp_cvar_version
-
-// Should output:
-// KTP Cvar Checker version 7.11
-
-// Check AMX logs on startup
-// Should show:
-// [KTP Cvar Checker] Monitoring 59 cvars with priority-based system:
-// [KTP Cvar Checker] - Priority cvars (9): checked every 2 seconds
-// [KTP Cvar Checker] - Standard cvars (50): rotated every 10 seconds
-// [KTP Cvar Checker] Enforcement: Auto-correct + console logging + Discord webhooks
-```
-
----
-
-## 📋 Monitored Cvars Reference
-
-### Exact Value Cvars (51)
-
-| Cvar | Required | Purpose |
-|------|----------|---------|
-| `ambient_fade` | `100` | Ambient sound fade distance |
-| `ambient_level` | `0.3` | Ambient sound level |
-| `cl_bobcycle` | `0.8` | View bob cycle |
-| `cl_bobup` | `0.5` | View bob up amount |
-| `cl_fixtimerate` | `7.5` | Fixed timerate |
-| `cl_gaitestimation` | `1` | Gait estimation |
-| `fastsprites` | `0` | Standard sprite rendering |
-| `gl_affinemodels` | `0` | Affine texture mapping |
-| `gl_alphamin` | `0.25` | Minimum alpha value |
-| `gl_clear` | `0` | Prevents transparent walls |
-| `gl_cull` | `1` | Backface culling |
-| `gl_d3dflip` | `0` | D3D flip |
-| `gl_dither` | `1` | Dithering |
-| `gl_keeptjunctions` | `1` | Keep T-junctions |
-| `gl_lightholes` | `1` | Light holes |
-| `gl_monolights` | `0` | Monochrome lights |
-| `gl_nobind` | `0` | Texture binding |
-| `gl_nocolors` | `0` | Color rendering |
-| `gl_overbright` | `0` | Prevents brightness exploits |
-| `gl_palette_tex` | `1` | Palette textures |
-| `gl_picmip` | `0` | Texture quality |
-| `gl_playermip` | `0` | Player model texture quality |
-| `gl_round_down` | `3` | Texture rounding |
-| `r_bmodelinterp` | `1` | Brush model interpolation |
-| `r_drawentities` | `1` | Draw entities |
-| `r_drawviewmodel` | `1` | Draw viewmodel (weapon) |
-| `r_dynamic` | `1` | Dynamic lighting |
-| `r_fullbright` | `0` | Prevents wallhack-like lighting |
-| `r_glowshellfreq` | `2.2` | Glow shell frequency |
-| `r_lightmap` | `0` | Prevents texture exploits |
-| `r_traceglow` | `0` | Trace glow |
-| `r_wadtextures` | `0` | WAD texture loading |
-| `texgamma` | `2` | Texture gamma |
-| `r_luminance` | `0` | Luminance |
-| `s_show` | `0` | Prevents sound origin visualization |
-| `cl_showevents` | `0` | Show client events |
-| `cl_anglespeedkey` | `0.67` | Angle speed key multiplier |
-| `cl_lc` | `1` | Lag compensation on |
-| `cl_lw` | `1` | Client-side weapons on |
-| `cl_upspeed` | `320` | Up/down movement speed |
-| `lookspring` | `0` | Look spring |
-| `lookstrafe` | `0` | Look strafe |
-| `cl_movespeedkey` | `0.3` | Movement speed key multiplier |
-| `m_pitch` | `0.022` or `-0.022` | Standard mouse pitch (inverted allowed) |
-| `m_side` | `0.8` | Mouse side movement |
-| `cl_pitchdown` | `89` | Pitch down limit |
-| `cl_pitchup` | `89` | Pitch up limit |
-| `cl_yawspeed` | `210` | Yaw speed |
-| `cl_pitchspeed` | `225` | Pitch speed |
-| `hud_takesshots` | `1` | HUD screenshot |
-| `cl_mousegrab` | `1` | Mouse grab |
-
-### Range Value Cvars (8)
-
-| Cvar | Min | Max | Purpose |
-|------|-----|-----|---------|
-| `lightgamma` | `1.81` | `3.0` | Prevent extreme brightness |
-| `cl_smoothtime` | `0.0` | `0.1` | Movement smoothing |
-| `cl_bob` | `0.0` | `0.011` | View bobbing |
-| `cl_updaterate` | `100` | `120` | Network update rate |
-| `cl_cmdrate` | `100` | `500` | Command rate |
-| `rate` | `100000` | `1000000` | Connection rate |
-| `ex_interp` | `0.0` | `0.03` | Entity interpolation |
-| `fps_max` | `60` | `500` | FPS limiter |
-
----
-
-## 🎮 Usage
-
-### For Server Admins
-
-**Configure Discord Webhooks (Optional):**
-
-1. Create a Discord webhook in your server
-2. Configure `discord.ini` in your configs directory (shared with other KTP plugins)
-3. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup instructions
-4. Restart server or reload plugin
-5. Violations will now appear as rich embeds in Discord
-
-**Monitor Violations:**
-```bash
-# Check AMX logs (adjust path for your installation)
-cat <logsdir>/L1128.log | grep "KTP Cvar"
-
-# Look for patterns of violations
-# Investigate players with multiple violations
-```
-
-> **Note:** Replace `<logsdir>` with your actual logs directory (e.g., `addons/ktpamx/logs/` or `addons/amxmodx/logs/`).
-
-**Manual Cvar Check:**
-- Players can type `/cvar` in chat to trigger manual check
-- Runs same parallel query check as initial connect
-- Useful for verifying configuration
-
-### For Players
-
-**Check If Monitoring Is Active:**
-```
-// In console
-ktp_cvar_version
-
-// Should see:
-// KTP Cvar Checker version 7.11
-```
-
-**If You Receive Violations:**
-
-1. **Check your config.cfg** for restricted cvars
-2. **Reset to defaults**:
-   ```
-   exec userconfig.cfg
-   exec config.cfg
-   ```
-3. **Common problematic cvars**:
-   ```
-   // Remove or fix these in config.cfg:
-   r_fullbright "1"      // Change to "0"
-   gl_overbright "1"     // Change to "0"
-   s_show "1"            // Change to "0"
-   ```
-4. **All violations auto-correct** - plugin forces correct values immediately
-5. **Persistent violations** indicate script/cheat interference
-
-**Legitimate Settings:**
-- `m_pitch` can be negative (`-0.022`) for inverted mouse
-- Network cvars (`rate`, `cl_updaterate`) may need adjustment for your connection
-- `ex_interp` between 0 and 0.03 is allowed for latency compensation
-
-### For Competitive Match Admins
-
-**Pre-Match Setup:**
-
-1. Configure `discord.ini` in configs directory (shared with other KTP plugins)
-2. Optionally enable cvar-specific Discord alerts:
-   ```cfg
-   // In server.cfg or match config
-   ktp_cvar_discord "1"    // Enable Discord logging for cvar violations (default: 1)
-   ```
-
-See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for Discord setup.
-
-**During Match:**
-- Monitor AMX logs for violations
-- Check Discord channel for real-time alerts
-- All violations are auto-corrected immediately
-- No player punishment - pure enforcement only
-
----
-
-## 🔗 Related KTP Projects
-
-### **KTP Competitive Infrastructure:**
-
-**🔧 Engine Layer:**
-- **[KTP-ReHLDS](https://github.com/afraznein/KTPReHLDS)** - Custom engine with pfnClientCvarChanged callback
-- **[KTPAMXX](https://github.com/afraznein/KTPAMXX)** - Custom AMX Mod X with client_cvar_changed forward
-
-**🎮 Plugin Layer:**
-- **[KTP Match Handler](https://github.com/afraznein/KTPMatchHandler)** - Match management with pause
-- **[KTP Cvar Checker](https://github.com/afraznein/KTPCvarChecker)** - This project
-
-**🌐 Supporting Services:**
-- **[KTP Discord Relay](https://github.com/afraznein/DiscordRelay)** - HTTP proxy for Discord
-- **[KTP Score Parser](https://github.com/afraznein/KTPScoreBot-ScoreParser)** - Match score parsing
-- **[KTP Weekly Matches](https://github.com/afraznein/KTPScoreBot-WeeklyMatches)** - Schedule management
-- **[KTP HLTV Recorder](https://github.com/afraznein/KTPHLTVRecorder)** - Automatic HLTV demo recording
-
----
-
-## 📝 Version History
-
-### v7.11 (2026-01-20) - Discord Notification Grouping
-- 🔧 **CHANGED: Discord notifications** - Group all cvar violations into single Discord embed per player
-- ✅ **ADDED: Repeat violation tracking** - Shows count per cvar in grouped notification
-- ✅ **ADDED: 5-second batching window** - Violations collected before sending single notification
-- 🔧 **CHANGED: ktp_cvar_discord default** - Now defaults to 1 (enabled)
-
-### v7.10 (2026-01-13) - Discord Branding
-- 🔧 **CHANGED: Discord embed title** - Now includes `:ktp:` emoji for consistent branding
-
-### v7.9 (2026-01-09) - Discord Toggle
-- ✅ **ADDED: ktp_cvar_discord cvar** - Toggle to disable Discord logging for cvar checker (0/1)
-- ℹ️ **Default: 1 (enabled)** - With notification grouping to reduce spam
-- ℹ️ Separate from global discord.ini - allows disabling cvar spam specifically
-
-### v7.8 (2025-12-31) - Debug Log Cleanup
-- 🗑️ **REMOVED: fn_msginitial() debug logging** - No longer needed
-
-### v7.7 (2025-12-21) - Shared Discord Config
-- 🔧 **CHANGED: Discord integration** - Now uses `ktp_discord.inc` shared library
-- 🔧 **CHANGED: Config location** - Discord config loaded from `discord.ini` (same as other KTP plugins)
-- 🗑️ **REMOVED: fcos_discord_enabled cvar** - Replaced by shared config
-- 🗑️ **REMOVED: fcos_discord_webhook cvar** - Replaced by shared config
-- 🗑️ **REMOVED: Direct webhook code** - Replaced with relay pattern
-
-### v7.6 (2025-12-20) - cl_filterstuffcmd Detection
-- ✅ **ADDED: Enforcement attempt tracking** - Tracks failed attempts per player per cvar
-- ✅ **ADDED: cl_filterstuffcmd warning** - After 3 failed attempts, shows detailed warning
-- ✅ **ADDED: Public announcement** - All players see when enforcement is blocked
-- 🔧 **CHANGED: Spam prevention** - Stops chat spam after warning shown once per cvar
-- 🔧 **CHANGED: Tracking reset** - Resets when player fixes the cvar value
-
-### v7.5 (2025-12-08) - Timing Fixes and Debug Improvements
-- 🔧 **FIXED: fn_servermessage() timing** - Moved from plugin_init() to plugin_cfg() for proper execution order
-- ✅ **ADDED: Debug logging** - fn_msginitial() now logs debug info for troubleshooting
-- ✅ **ADDED: Safety check** - is_user_connected() check before client prints
-- 🔧 **CHANGED: Initial check message** - Now uses print_chat instead of print_console for better visibility
-- 📝 **BRANDING: Updated "KTPAMXX" to "KTP AMX"** - Consistent naming across all references
-
-### v7.4 (2025-12-02) - Priority-Based Periodic Monitoring
-- ✅ **ADDED: Periodic cvar query system** - Actively queries cvars to trigger ReHLDS callback
-- ✅ **ADDED: Priority cvar system** - 9 critical cvars (m_pitch, cl_yawspeed, cl_pitchspeed, lightgamma, cl_bob, cl_updaterate, cl_cmdrate, rate, ex_interp) checked every 2 seconds
-- ✅ **ADDED: Standard cvar rotation** - 50 cvars rotated every 10 seconds (5 per check)
-- 📊 **PERFORMANCE: ~5 queries/sec per player** (~160 q/s for 32 players, ~0.4% CPU, ~8 KB/s network)
-- 📊 **DETECTION: Priority cvars in <2s, standard cvars in <100s** (worst case)
-- 🔧 **CLARIFIED: System is query-based, not truly "real-time"** - Server must actively query cvars
-
-### v7.3 (2025-11-29) - Bug Fixes and Chat Announcements
-- 🔧 **FIXED: Cvar callback async bug** - Now looks up cvar by name instead of relying on counter
-- ✅ **ADDED: Chat announcements** - All players see when a cvar is corrected
-
-### v7.2 (2025-11-28) - Cvar List Updates
-- ✅ **ADDED: gl_round_down** - Value: 3
-- ✅ **ADDED: hud_takesshots** - Value: 1
-- 🔧 **FIXED: lightgamma min** - Changed from 1.7 to 1.81
-- 🔧 **FIXED: ex_interp max** - Changed from 0.04 to 0.03
-- 📊 **Total cvars: 59** (51 exact + 8 ranges)
-
-### v7.1 (2025-11-28) - Pure Enforcement + Discord
-- ✅ **ADDED: /cvar command** - Manual cvar check for all players
-- ✅ **ADDED: Discord webhook logging** - Optional real-time violation alerts via cURL
-- ✅ **ADDED: fcos_discord_enabled cvar** - Enable/disable Discord logging
-- ✅ **ADDED: fcos_discord_webhook cvar** - Discord webhook URL
-- 🗑️ **REMOVED: All punishment cvars** - No more warnings, name change, slay, kick, ban
-- 🗑️ **REMOVED: All punishment logic** - Pure enforcement only (auto-correct + logging)
-- 📉 **Simplified: 443 lines** (down from 1047 lines in v6.5)
-
-### v7.0 (2025-11-28) - MAJOR UPGRADE: Real-time Detection with KTPAMXX
-- ⚡ **ADDED: client_cvar_changed() forward** - Real-time detection for ALL cvars via KTPAMXX
-- 🚀 **PERFORMANCE: 100% real-time detection** - No periodic polling overhead
-- 🚀 **PERFORMANCE: Instant detection** - < 1 second response time for all cvars
-- ⚠️ **REQUIRES: KTPAMXX** - Custom AMX Mod X fork with pfnClientCvarChanged callback
-- ⚠️ **REQUIRES: KTP-ReHLDS** - Custom ReHLDS with client cvar callback support
-- 🗑️ **REMOVED: Backwards compatibility** - No ReAPI support, no periodic polling
-- 🗑️ **REMOVED: Kick/ban system** - Enforcement only (no punishments)
-- 🗑️ **REMOVED: MOTD warnings** - Console logging only
-- 🗑️ **REMOVED: Priority tier system** - Not needed with real-time detection
-
-### v6.5 and Earlier
-- See git history for older versions with backwards compatibility, ReAPI support, and punishment systems
-
----
-
-## 🐛 Troubleshooting
-
-### Plugin Not Loading
-
-**Problem:** Plugin fails to load or shows errors
-
-**Solutions:**
-- ✅ Verify you're running **KTPAMXX** (not standard AMX Mod X)
-- ✅ Verify you're running **KTP-ReHLDS** (not standard ReHLDS)
-- ✅ Check AMX logs for compile errors
-- ✅ Ensure plugin is in `plugins/` directory
-- ✅ Ensure plugin is enabled in `plugins.ini`
-
-### Cvars Not Being Checked
-
-**Problem:** No violations detected even with obvious cheats
-
-**Solutions:**
-- ✅ Verify plugin is loaded: `amx_plugins`
-- ✅ Check AMX logs for errors
-- ✅ Test with known violation: `r_fullbright 1` in console
-- ✅ Type `/cvar` to trigger manual check
-- ✅ Check logs for "client_cvar_changed" callbacks
-
-### Slow or No Detection
-
-**Problem:** Violations detected slowly or not at all
-
-**Solutions:**
-- ✅ **Verify KTPAMXX is installed** - Standard AMX will NOT work
-- ✅ **Verify KTP-ReHLDS is installed** - Standard ReHLDS will NOT work
-- ✅ **Check logs on startup** for: "Periodic monitoring started for player X"
-- ✅ **Test with priority cvar**: `m_pitch 0.05` should be corrected within 2 seconds
-- ✅ **Test with standard cvar**: `r_fullbright 1` may take up to 100 seconds to detect
-- ✅ **Rate limiting is normal**: Max 1 validation per second per player
-- ℹ️ **Expected behavior**: System queries cvars periodically, not instant on client change
-
-### Discord Webhooks Not Working
-
-**Problem:** Violations not appearing in Discord
-
-**Solutions:**
-- ✅ Verify `discord.ini` is properly configured in configs directory
-- ✅ Verify Discord Relay service is running and accessible
-- ✅ Check AMX logs for Discord-related errors
-- ✅ See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) troubleshooting guide
-
-### False Positives
-
-**Problem:** Legitimate players getting violations logged
-
-**Solutions:**
-- ℹ️ **All violations are auto-corrected** - No player punishment
-- ℹ️ **Check network cvars** - `rate`, `cl_updaterate` vary by connection
-- ℹ️ **m_pitch negatives are allowed** - Inverted mouse is legitimate (-0.022)
-- ℹ️ **Review logs** to understand violation patterns
-- ℹ️ **Logs are for information** - No automatic bans
-
----
-
-## 🙏 Acknowledgments
-
-**Current Maintainer:**
-- **Nein_** ([@afraznein](https://github.com/afraznein)) - KTPAMXX integration, pure enforcement redesign, Discord webhooks
-
-**Original Author:**
-- **SubStream** - Force CAL Open Settings (fcos)
-- **Original Thread**: http://forums.alliedmods.net/showthread.php?t=25927
-
-**Contributors:**
-- **KTP Community** - Testing, feedback, competitive insights
-- **AMX Mod X Team** - Plugin platform
-
----
-
-## 📄 License
-
-**GPL v2** - Same as original fcos plugin
-
-See [LICENSE](LICENSE) file for details
-
----
-
-## 👤 Author
-
-**Nein_**
-- GitHub: [@afraznein](https://github.com/afraznein)
-- Project: KTP Competitive Infrastructure
-
----
-
-## ⚠️ Important Notes
-
-### For Server Operators
-
-**Requirements:**
-- ✅ **KTPAMXX required** - Will NOT work on standard AMX Mod X
-- ✅ **KTP-ReHLDS required** - Will NOT work on standard ReHLDS or HLDS
-- ✅ **No backwards compatibility** - Designed specifically for KTP infrastructure
-
-**Configuration:**
-- ℹ️ **No punishment system** - Plugin only auto-corrects and logs
-- ℹ️ **Discord webhooks optional** - Provides real-time alerts
-- ℹ️ **Logs are informational** - Use for monitoring and investigation
-
-**Performance:**
-- ✅ **Low CPU overhead** - ~0.4% CPU usage for 32 players
-- ✅ **Priority-based detection** - Critical cvars detected within 2 seconds
-- ✅ **Periodic queries** - Server actively queries cvars on schedule
-- ✅ **Rate limited** - Max 1 validation per second per player
-- ✅ **Minimal network usage** - ~8 KB/s for 32-player server (~160 queries/sec)
-
-### For Competitive Leagues
-
-**Recommended Settings:**
-
-Configure Discord webhooks via `discord.ini` for real-time monitoring. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
-
-**Best Practices:**
-- ✅ Announce enforcement in league rules
-- ✅ Provide cvar config file for players
-- ✅ Monitor Discord channel for violations
-- ✅ Keep detailed logs for disputes
-- ✅ Use KTPAMXX + KTP-ReHLDS infrastructure
-
-**No Automatic Punishments:**
-- ℹ️ Plugin only **auto-corrects** and **logs** violations
-- ℹ️ No automatic warnings, kicks, or bans
-- ℹ️ Admins must manually review logs and take action
-- ℹ️ Pure enforcement ensures fair play without false positive bans
-
----
-
-**KTP Cvar Checker** - Keeping competitive play fair through automatic enforcement. 🛡️
+GPL v2 — See [LICENSE](LICENSE).

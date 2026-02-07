@@ -2,6 +2,17 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.12] - 2026-02-04
+
+### Dynamic hud_takesshots Enforcement
+
+**Changed:**
+- `hud_takesshots` enforcement now only applies to competitive matches (`.ktp`, `.ktpOT`)
+- Non-competitive modes (`.12man`, `.scrim`, `.draft`) no longer require `hud_takesshots 1`
+- Uses `ktp_match_competitive` cvar from KTPMatchHandler to determine match type
+
+---
+
 ## [7.11] - 2026-01-20
 
 ### Discord Notification Grouping
