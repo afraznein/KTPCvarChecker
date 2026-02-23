@@ -1,8 +1,8 @@
 # KTP Cvar Checker
 
-**Version 7.12** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.16** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
-Pure enforcement anti-cheat that monitors 59 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
+Pure enforcement anti-cheat that monitors 34 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
 Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
@@ -11,7 +11,7 @@ Originally based on SubStream's "Force CAL Open Settings" (fcos).
 ```
 KTP Cvar Checker: queries cvars periodically
      |  Priority (9 cvars): every 2 seconds
-     |  Standard (50 cvars): rotated every 10 seconds (5 per check)
+     |  Standard (25 cvars): rotated every 10 seconds (5 per check)
      v
 Game Client: responds with current cvar value
      v
@@ -27,8 +27,8 @@ KTP Cvar Checker: validates, enforces, logs, Discord alert
 | Type | Count | Interval | Worst-Case Detection |
 |------|-------|----------|---------------------|
 | Priority cvars | 9 | Every 2s | < 2 seconds |
-| Standard cvars | 50 | 5 per 10s | ~100 seconds |
-| Initial check | All 59 | Parallel batches of 8 | ~4 seconds |
+| Standard cvars | 25 | 5 per 10s | ~50 seconds |
+| Initial check | All 34 | Parallel batches of 8 | ~2 seconds |
 
 Performance: ~5 queries/sec per player (~160 q/s for 32 players, ~0.4% CPU, ~8 KB/s network).
 
@@ -42,13 +42,13 @@ Performance: ~5 queries/sec per player (~160 q/s for 32 players, ~0.4% CPU, ~8 K
 - **Manual check** — `/cvar` command triggers full parallel query
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 
-## Monitored Cvars (59 total)
+## Monitored Cvars (34 total)
 
-**Priority (9):** `m_pitch`, `cl_yawspeed`, `cl_pitchspeed`, `lightgamma`, `cl_bob`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`
+**Priority (9):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, `cl_lc`, `cl_lw`
 
-**Standard (50):** Graphics (33), audio (2), movement (7), gameplay (8) — see source for full list.
+**Standard (25):** Graphics, audio, movement, and gameplay cvars — see source for full list.
 
-**Range cvars (8):** `lightgamma` (1.81-3.0), `cl_smoothtime` (0-0.1), `cl_bob` (0-0.011), `cl_updaterate` (100-120), `cl_cmdrate` (100-500), `rate` (100k-1M), `ex_interp` (0-0.03), `fps_max` (60-500).
+**Range cvars (8):** `lightgamma` (1.81-3.0), `cl_smoothtime` (0-0.1), `cl_bob` (0-0.011), `cl_updaterate` (100-200), `cl_cmdrate` (100-500), `rate` (100k-1M), `ex_interp` (0-0.03), `fps_max` (60-750).
 
 ## Requirements
 

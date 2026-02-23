@@ -2,10 +2,28 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.11
- *   Release Date:      2026-01-20
+ *   Current Version:   7.13
+ *   Release Date:      2026-02-17
  *
  *   Changelog:
+ *   7.16 2026-02-20 - Index out of bounds fix
+ *                    * FIXED: Runtime error 4 (index out of bounds) in fn_loopquery/fn_query_parallel
+ *                    + CHANGED: All player arrays from [MAX_PLAYERS] to [MAX_PLAYERS+1] (off-by-one safety)
+ *                    + ADDED: Bounds checks on all functions receiving player ID parameter
+ *   7.15 2026-02-19 - Performance fix: deferred enforcement
+ *                    * FIXED: clc_cvarvalue2 opcode processing taking 160-185ms (froze entire server frame)
+ *                    + CHANGED: Enforcement now deferred to next frame via set_task(0.0) — no longer blocks opcode handler
+ *                    - REMOVED: Debug log_amx calls in fn_querycvar, fn_firstcomplete, fn_start_monitoring
+ *   7.14 2026-02-18 - fps_max range update
+ *                    + CHANGED: fps_max top-end raised from 500 to 750
+ *   7.13 2026-02-17 - Cvar list cleanup
+ *                    - REMOVED: 25 unnecessary cvars (rendering tweaks, engine-limited values)
+ *                    + CHANGED: Enforced cvars reduced from 59 to 34
+ *                    + CHANGED: Priority cvar list updated (replaced cl_yawspeed, cl_pitchspeed,
+ *                      lightgamma, cl_bob with cl_pitchdown, cl_pitchup, cl_lc, cl_lw)
+ *                    + CHANGED: cl_updaterate max raised from 120 to 200 (matches sv_maxupdaterate)
+ *   7.12 2026-02-04 - Dynamic hud_takesshots enforcement
+ *                    + CHANGED: hud_takesshots only enforced during competitive matches
  *   7.11 2026-01-20 - Discord notification grouping
  *                    + CHANGED: Group all cvar violations into single Discord embed per player
  *                    + ADDED: Track repeat violations with count per cvar
@@ -42,9 +60,9 @@
  *                    + ADDED: Priority cvar system - 9 critical cvars checked every 2 seconds
  *                      (m_pitch, cl_yawspeed, cl_pitchspeed, lightgamma, cl_bob,
  *                       cl_updaterate, cl_cmdrate, rate, ex_interp)
- *                    + ADDED: Standard cvar rotation - 50 cvars cycled through every 10 seconds
- *                    * PERFORMANCE: ~5 queries/second per player (160 q/s for 32 players)
- *                    * DETECTION: Priority cvars detected in <2s, standard cvars in <100s
+ *                    + ADDED: Standard cvar rotation - 25 cvars cycled through every 1 second each
+ *                    * PERFORMANCE: ~3 queries/second per player (engine limited to 1 callback/frame)
+ *                    * DETECTION: Priority cvars full cycle ~4.5s, standard cvars full cycle ~25s
  *   7.3 2025-11-29 - Bug fixes and chat announcements
  *                    * FIXED: Cvar callback now looks up cvar by name (async query fix)
  *                    + ADDED: Chat announcement to all players when cvar is corrected
@@ -81,7 +99,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.12";
+new const gs_VERSION[] = "7.16";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2026;
 
@@ -101,19 +119,19 @@ new const inverse_p[] = "-0.022";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 59
-#define MIN_MAX_CVAR_START 51
+#define TOTAL_CVARS 34
+#define MIN_MAX_CVAR_START 26
 #define ALT_VALUES_COUNT 8
 
-// Parallel query batch size for initial check
-#define PARALLEL_BATCH_SIZE 8
+// Queries per tick (engine only processes ~1 callback per frame)
+#define QUERIES_PER_TICK 1
 
 // Rate limiting
 #define CHECK_RATE_LIMIT 1  // Minimum 1 second between checks per player
 
-// Priority-based monitoring intervals
-#define PRIORITY_CHECK_INTERVAL 2.0   // High-priority cvars checked every 2 seconds
-#define STANDARD_CHECK_INTERVAL 10.0  // Standard cvars checked every 10 seconds
+// Priority-based monitoring intervals (1 query per tick due to engine limitation)
+#define PRIORITY_CHECK_INTERVAL 0.5   // Priority cvar rotation: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
+#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: 1 cvar every 1.0s (full cycle: 25s for 25 cvars)
 
 // Priority cvar count
 #define PRIORITY_CVARS_COUNT 9
@@ -136,19 +154,28 @@ new gp_cvar_discord
 // PLAYER DATA ARRAYS
 // ============================================================================
 
-new bool:gb_FirstCheckComplete[MAX_PLAYERS]
-new bool:gb_StopChecking[MAX_PLAYERS]
-new gi_cvarnumID[MAX_PLAYERS]
-new gi_last_check_time[MAX_PLAYERS]
-new bool:gb_enforcing_cvar[MAX_PLAYERS]
+new bool:gb_FirstCheckComplete[MAX_PLAYERS + 1]
+new bool:gb_StopChecking[MAX_PLAYERS + 1]
+new gi_cvarnumID[MAX_PLAYERS + 1]
+new gi_last_check_time[MAX_PLAYERS + 1]
+new bool:gb_enforcing_cvar[MAX_PLAYERS + 1]
 
 // Periodic monitoring state
-new gi_standard_cvar_index[MAX_PLAYERS]  // Current index in standard cvar rotation
+new gi_priority_cvar_index[MAX_PLAYERS + 1]  // Current index in priority cvar rotation
+new gi_standard_cvar_index[MAX_PLAYERS + 1]  // Current index in standard cvar rotation
 
 // Enforcement attempt tracking (detect cl_filterstuffcmd blocking)
-new gi_enforce_attempts[MAX_PLAYERS][TOTAL_CVARS]  // Count of failed enforcement attempts per cvar
-new bool:gb_filterstuff_warned[MAX_PLAYERS][TOTAL_CVARS]  // Already showed warning for this cvar
+new gi_enforce_attempts[MAX_PLAYERS + 1][TOTAL_CVARS]  // Count of failed enforcement attempts per cvar
+new bool:gb_filterstuff_warned[MAX_PLAYERS + 1][TOTAL_CVARS]  // Already showed warning for this cvar
 #define MAX_ENFORCE_ATTEMPTS 3  // After this many attempts, show cl_filterstuffcmd warning
+
+// Deferred enforcement (moves expensive work out of opcode handler to prevent frame freezes)
+#define TASK_DEFER_ENFORCE 3000
+new g_deferCvarIndex[MAX_PLAYERS + 1]
+new g_deferCvarName[MAX_PLAYERS + 1][MAX_CVAR_NAME_LEN]
+new Float:g_deferValue[MAX_PLAYERS + 1]
+new Float:g_deferCalValue[MAX_PLAYERS + 1]
+new g_deferCalStr[MAX_PLAYERS + 1][16]
 
 // ============================================================================
 // GLOBAL VARIABLES
@@ -181,53 +208,42 @@ new bool:g_discordPending
 
 // Priority cvars: checked every 2 seconds (movement/network/performance exploits)
 new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
-"m_pitch", "cl_yawspeed", "cl_pitchspeed", "lightgamma", "cl_bob",
-"cl_updaterate", "cl_cmdrate", "rate", "ex_interp"
+"m_pitch", "cl_pitchdown", "cl_pitchup", "cl_updaterate", "cl_cmdrate",
+"rate", "ex_interp", "cl_lc", "cl_lw"
 }
 
 // All cvars (for initial check and reference)
+// Indices 0-25: exact value cvars, indices 26-33: range cvars (min/max)
 new gs_cvars[TOTAL_CVARS][] = {
-"ambient_fade", "ambient_level", "cl_bobcycle", "cl_bobup", "cl_fixtimerate",
-"cl_gaitestimation", "fastsprites", "gl_affinemodels", "gl_alphamin", "gl_clear",
-"gl_cull", "gl_d3dflip", "gl_dither", "gl_keeptjunctions", "gl_lightholes",
-"gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright", "gl_palette_tex",
-"gl_picmip", "gl_playermip", "gl_round_down", "r_bmodelinterp", "r_drawentities",
-"r_drawviewmodel", "r_dynamic", "r_fullbright", "r_glowshellfreq", "r_lightmap",
-"r_traceglow", "r_wadtextures", "texgamma", "r_luminance", "s_show",
-"cl_showevents", "cl_anglespeedkey", "cl_lc", "cl_lw", "cl_upspeed",
-"lookspring", "lookstrafe", "cl_movespeedkey", "m_pitch", "m_side",
-"cl_pitchdown", "cl_pitchup", "cl_yawspeed", "cl_pitchspeed", "hud_takesshots",
-"cl_mousegrab", "lightgamma", "cl_smoothtime", "cl_bob", "cl_updaterate",
+"cl_bobcycle", "cl_bobup", "cl_lc", "cl_lw", "cl_mousegrab",
+"cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
+"gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
+"gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
+"r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"texgamma", "lightgamma", "cl_smoothtime", "cl_bob", "cl_updaterate",
 "cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
 // Standard cvars (non-priority): checked via rotation every 10 seconds
 // Excludes the 9 priority cvars listed above
-#define STANDARD_CVARS_COUNT 50
+#define STANDARD_CVARS_COUNT 25
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
-"ambient_fade", "ambient_level", "cl_bobcycle", "cl_bobup", "cl_fixtimerate",
-"cl_gaitestimation", "fastsprites", "gl_affinemodels", "gl_alphamin", "gl_clear",
-"gl_cull", "gl_d3dflip", "gl_dither", "gl_keeptjunctions", "gl_lightholes",
-"gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright", "gl_palette_tex",
-"gl_picmip", "gl_playermip", "gl_round_down", "r_bmodelinterp", "r_drawentities",
-"r_drawviewmodel", "r_dynamic", "r_fullbright", "r_glowshellfreq", "r_lightmap",
-"r_traceglow", "r_wadtextures", "texgamma", "r_luminance", "s_show",
-"cl_showevents", "cl_anglespeedkey", "cl_lc", "cl_lw", "cl_upspeed",
-"lookspring", "lookstrafe", "cl_movespeedkey", "m_side", "cl_pitchdown",
-"cl_pitchup", "hud_takesshots", "cl_mousegrab", "cl_smoothtime", "fps_max"
+"cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
+"gl_clear", "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors",
+"gl_overbright", "gl_playermip", "hud_takesshots", "r_drawentities", "r_drawviewmodel",
+"r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"texgamma", "lightgamma", "cl_smoothtime", "cl_bob", "fps_max"
 }
 
 new gs_calvalues[TOTAL_CVARS][] = {
-"100", "0.3", "0.8", "0.5", "7.5", "1", "0", "0", "0.25", "0",
-"1", "0", "1", "1", "1", "0", "0", "0", "0", "1",
-"0", "0", "3", "1", "1", "1", "1", "0", "2.2", "0",
-"0", "0", "2", "0", "0", "0", "0.67", "1", "1", "320",
-"0", "0", "0.3", "0.022", "0.8", "89", "89", "210", "225", "1",
-"1", "1.81", "0", "0", "100", "100", "100000", "0", "60"
+"0.8", "0.5", "1", "1", "1", "89", "89", "0", "0", "0",
+"0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
+"1", "0", "0", "0", "0", "2", "1.81", "0", "0", "100",
+"100", "100000", "0", "60"
 }
 
 new gs_altvalues[ALT_VALUES_COUNT][] = {
-"3", "0.1", "0.011", "120", "500", "1000000", "0.03", "500"
+"3", "0.1", "0.011", "200", "500", "1000000", "0.03", "750"
 }
 
 // Cvar loop variable
@@ -288,7 +304,7 @@ public fn_servermessage() {
 	if (file_exists(gs_fcosconfigfile))
 		server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG2")
 
-	server_print("[%s] Monitoring 59 cvars with priority-based system:", gs_PLUGIN)
+	server_print("[%s] Monitoring %d cvars with priority-based system:", gs_PLUGIN, TOTAL_CVARS)
 	server_print("[%s] - Priority cvars (%d): checked every %.0f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
 	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", gs_PLUGIN, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
 	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", gs_PLUGIN, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
@@ -367,6 +383,7 @@ public client_putinserver(id) {
 
 	gb_FirstCheckComplete[id] = false
 	gb_StopChecking[id] = false
+	gi_priority_cvar_index[id] = 0
 	gi_standard_cvar_index[id] = 0
 
 	set_task(5.0, "fn_msginitial", id)
@@ -379,6 +396,9 @@ public client_putinserver(id) {
 public client_disconnected(id) {
 	gb_StopChecking[id] = true
 	remove_task(id)
+	remove_task(id + 1000)  // priority monitoring task
+	remove_task(id + 2000)  // standard monitoring task
+	remove_task(id + TASK_DEFER_ENFORCE)  // deferred enforcement task
 	gb_FirstCheckComplete[id] = false
 	gi_last_check_time[id] = 0
 
@@ -407,32 +427,30 @@ public cmd_manual_check(id) {
 // ============================================================================
 
 public fn_loopquery(id) {
+	if (id < 1 || id > MAX_PLAYERS) return
 	gi_cvarnumID[id] = 0
 	fn_query_parallel(id)
 }
 
 public fn_query_parallel(id) {
+	if (id < 1 || id > MAX_PLAYERS) return
 	if (gi_cvarnumID[id] >= TOTAL_CVARS) {
 		fn_firstcomplete(id)
 		return
 	}
 
-	new batch_count = 0
-	new start_idx = gi_cvarnumID[id]
-
-	for (new i = start_idx; i < TOTAL_CVARS && batch_count < PARALLEL_BATCH_SIZE; i++) {
-		query_client_cvar(id, gs_cvars[i], "fn_querycvar")
-		gi_cvarnumID[id]++
-		batch_count++
-	}
+	// Send ONE query per tick (engine only processes ~1 callback per frame)
+	query_client_cvar(id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar")
+	gi_cvarnumID[id]++
 
 	if (gi_cvarnumID[id] < TOTAL_CVARS)
-		set_task(0.25, "fn_query_parallel", id)
+		set_task(0.3, "fn_query_parallel", id)
 	else
 		fn_firstcomplete(id)
 }
 
-public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[]) {
+public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
+	if (id < 1 || id > MAX_PLAYERS) return
 	new Float:valueFromPlayer = floatstr(s_VALUE)
 
 	// Find the cvar index by name (don't rely on counter)
@@ -444,10 +462,8 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[])
 		}
 	}
 
-	if (cvar_index < 0) {
-		log_amx("[%s] ERROR: Unknown cvar '%s' in callback", gs_PLUGIN, s_CVARNAME)
+	if (cvar_index < 0)
 		return
-	}
 
 	if (cvar_index >= MIN_MAX_CVAR_START) {
 		fn_checkaltallowed(id, cvar_index, s_CVARNAME, valueFromPlayer,
@@ -461,6 +477,7 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[], const s_CALVALUE[])
 }
 
 public fn_firstcomplete(id) {
+	if (id < 1 || id > MAX_PLAYERS) return
 	if (!gb_FirstCheckComplete[id]) {
 		gb_FirstCheckComplete[id] = true
 	}
@@ -476,52 +493,58 @@ public fn_firstcomplete(id) {
  * Standard cvars: rotated through every 10 seconds
  */
 public fn_start_monitoring(id) {
+	if (id < 1 || id > MAX_PLAYERS) return
 	if (!is_user_connected(id) || gb_StopChecking[id])
 		return
 
+	// Ensure FirstCheckComplete is set — periodic monitoring should not be gated on initial check
+	if (!gb_FirstCheckComplete[id]) {
+		gb_FirstCheckComplete[id] = true
+	}
+
 	// Start priority cvar checks (repeating every 2 seconds)
-	set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id, _, _, "b")
+	set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id + 1000, "", 0, "b")
 
 	// Start standard cvar rotation (repeating every 10 seconds)
-	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id, _, _, "b")
+	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id + 2000, "", 0, "b")
 
-	log_amx("[%s] Periodic monitoring started for player %d", gs_PLUGIN, id)
+	log_amx("[%s] Periodic monitoring started for player %d (priority taskid=%d, standard taskid=%d)", gs_PLUGIN, id, id + 1000, id + 2000)
 }
 
 /**
  * Check all priority cvars (called every 2 seconds)
  * These are the most critical anti-cheat cvars
  */
-public fn_check_priority_cvars(id) {
-	if (!is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
+public fn_check_priority_cvars(taskid) {
+	new id = taskid - 1000
+
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
 		return
 
-	// Query all priority cvars
-	for (new i = 0; i < PRIORITY_CVARS_COUNT; i++) {
-		query_client_cvar(id, gs_priority_cvars[i], "fn_querycvar")
-	}
+	// Send ONE query per tick (engine only processes ~1 callback per frame)
+	new idx = gi_priority_cvar_index[id]
+	query_client_cvar(id, gs_priority_cvars[idx], "fn_querycvar")
+
+	// Rotate to next priority cvar
+	gi_priority_cvar_index[id] = (idx + 1) % PRIORITY_CVARS_COUNT
 }
 
 /**
  * Check standard cvars via rotation (called every 10 seconds)
- * Queries 5 cvars each time, cycling through all 49 standard cvars
+ * Queries 5 cvars each time, cycling through all standard cvars
  */
-public fn_check_standard_cvars(id) {
-	if (!is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
+public fn_check_standard_cvars(taskid) {
+	new id = taskid - 2000
+
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
 		return
 
-	// Query 5 standard cvars per check (completes full rotation in ~100 seconds)
-	new cvars_to_check = 5
+	// Send ONE query per tick (engine only processes ~1 callback per frame)
+	new idx = gi_standard_cvar_index[id]
+	query_client_cvar(id, gs_standard_cvars[idx], "fn_querycvar")
 
-	for (new i = 0; i < cvars_to_check && gi_standard_cvar_index[id] < STANDARD_CVARS_COUNT; i++) {
-		query_client_cvar(id, gs_standard_cvars[gi_standard_cvar_index[id]], "fn_querycvar")
-		gi_standard_cvar_index[id]++
-	}
-
-	// Reset rotation when we reach the end
-	if (gi_standard_cvar_index[id] >= STANDARD_CVARS_COUNT) {
-		gi_standard_cvar_index[id] = 0
-	}
+	// Rotate to next standard cvar
+	gi_standard_cvar_index[id] = (idx + 1) % STANDARD_CVARS_COUNT
 }
 
 // ============================================================================
@@ -545,7 +568,7 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	}
 
 	if (isInvalid) {
-		fn_enforce_cvar(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
@@ -554,11 +577,37 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
 	if (valueFromPlayer < calFloatValue || valueFromPlayer > altFloatValue) {
-		fn_enforce_cvar(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
 	}
+}
+
+/**
+ * Defer cvar enforcement to next frame via set_task(0.0)
+ * Moves expensive work (get_user_*, log_amx, client_print broadcast) out of the
+ * clc_cvarvalue2 opcode handler to prevent 160-185ms server frame freezes.
+ */
+stock defer_enforcement(id, cvar_index, const s_CVARNAME[], Float:valueFromPlayer, Float:calFloatValue, const s_CALVALUE[]) {
+	g_deferCvarIndex[id] = cvar_index
+	copy(g_deferCvarName[id], MAX_CVAR_NAME_LEN - 1, s_CVARNAME)
+	g_deferValue[id] = valueFromPlayer
+	g_deferCalValue[id] = calFloatValue
+	copy(g_deferCalStr[id], 15, s_CALVALUE)
+
+	// Schedule for next frame (removes any existing deferred task for this player)
+	remove_task(id + TASK_DEFER_ENFORCE)
+	set_task(0.0, "task_deferred_enforce", id + TASK_DEFER_ENFORCE)
+}
+
+public task_deferred_enforce(taskid) {
+	new id = taskid - TASK_DEFER_ENFORCE
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id))
+		return
+
+	fn_enforce_cvar(id, g_deferCvarIndex[id], g_deferCvarName[id],
+		g_deferValue[id], g_deferCalValue[id], g_deferCalStr[id])
 }
 
 // Reset enforcement tracking when cvar becomes valid
@@ -645,7 +694,7 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 	new bool:is_pitch = equal(s_CVARNAME, gs_pitch)
 
 	// Set enforcement flag to prevent recursion
-	gb_enforcing_cvar[id] = true
+	gb_enforcing_cvar[id] = bool:true
 
 	// Force correct value on client
 	if (is_pitch && (valueFromPlayer < 0.0)) {

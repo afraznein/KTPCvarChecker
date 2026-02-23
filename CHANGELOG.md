@@ -2,6 +2,64 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.16] - 2026-02-20
+
+### Index Out of Bounds Fix
+
+**Fixed:**
+- Runtime error 4 (index out of bounds) in `fn_loopquery` / `fn_query_parallel` when player ID equals `MAX_PLAYERS`
+
+**Changed:**
+- All player arrays from `[MAX_PLAYERS]` to `[MAX_PLAYERS + 1]` (off-by-one safety)
+
+**Added:**
+- Bounds checks (`id < 1 || id > MAX_PLAYERS`) on all functions receiving player ID parameter
+
+---
+
+## [7.15] - 2026-02-19
+
+### Performance Fix: Deferred Enforcement
+
+**Fixed:**
+- `clc_cvarvalue2` opcode processing taking 160-185ms (froze entire server frame) — enforcement logic (`get_user_*`, `log_amx`, `client_print` broadcast) was running inside the opcode handler
+
+**Changed:**
+- Enforcement now deferred to next frame via `set_task(0.0)` — opcode handler returns immediately
+- Monitoring tasks use offset task IDs (`id + 1000`, `id + 2000`) to avoid collisions
+- One query per tick per rotation (engine only processes ~1 cvar callback per frame)
+- Priority rotation: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
+- Standard rotation: 1 cvar every 1.0s (full cycle: 25s for 25 cvars)
+
+**Removed:**
+- Debug `log_amx` calls in `fn_querycvar`, `fn_firstcomplete`, `fn_start_monitoring`
+
+---
+
+## [7.14] - 2026-02-18
+
+### fps_max Range Update
+
+**Changed:**
+- `fps_max` max raised from 500 to 750
+
+---
+
+## [7.13] - 2026-02-17
+
+### Cvar List Cleanup
+
+**Removed:**
+- 25 unnecessary cvars: rendering tweaks (`gl_affinemodels`, `gl_alphamin`, `gl_cull`, `gl_dither`, `gl_keeptjunctions`, `gl_lightholes`, `gl_palette_tex`, `gl_picmip`, `gl_round_down`), engine-limited values (`cl_fixtimerate`, `cl_gaitestimation`, `cl_upspeed`, `cl_anglespeedkey`, `cl_movespeedkey`, `cl_yawspeed`, `cl_pitchspeed`, `ambient_fade`, `ambient_level`), and settings we don't police (`lookspring`, `lookstrafe`, `m_side`, `r_bmodelinterp`, `r_glowshellfreq`, `r_traceglow`, `r_wadtextures`)
+- Total enforced cvars reduced from 59 to 34 (26 exact + 8 range)
+
+**Changed:**
+- Priority cvar list updated: replaced `cl_yawspeed`, `cl_pitchspeed`, `lightgamma`, `cl_bob` with `cl_pitchdown`, `cl_pitchup`, `cl_lc`, `cl_lw`
+- `cl_updaterate` max raised from 120 to 200 (matches `sv_maxupdaterate`)
+- Startup message now uses `TOTAL_CVARS` constant instead of hardcoded count
+
+---
+
 ## [7.12] - 2026-02-04
 
 ### Dynamic hud_takesshots Enforcement
