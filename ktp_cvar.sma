@@ -2,10 +2,14 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.13
- *   Release Date:      2026-02-17
+ *   Current Version:   7.17
+ *   Release Date:      2026-02-25
  *
  *   Changelog:
+ *   7.17 2026-02-25 - Range cvar correction fix + buffer safety
+ *                    * FIXED: Range cvars always corrected to minimum even when value exceeds maximum
+ *                    * FIXED: Hardcoded buffer sizes in get_configsdir/formatex replaced with charsmax()
+ *                    * FIXED: Header version/date now matches #define VERSION
  *   7.16 2026-02-20 - Index out of bounds fix
  *                    * FIXED: Runtime error 4 (index out of bounds) in fn_loopquery/fn_query_parallel
  *                    + CHANGED: All player arrays from [MAX_PLAYERS] to [MAX_PLAYERS+1] (off-by-one safety)
@@ -99,7 +103,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.16";
+new const gs_VERSION[] = "7.17";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2026;
 
@@ -271,8 +275,8 @@ public plugin_init() {
 	register_clcmd("say_team /cvar", "cmd_manual_check")
 
 	register_dictionary("ktp_cvar.txt")
-	get_configsdir(gs_directory, 32)
-	formatex(gs_fcosconfigfile, 57, "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE)
+	get_configsdir(gs_directory, charsmax(gs_directory))
+	formatex(gs_fcosconfigfile, charsmax(gs_fcosconfigfile), "%s/%s%s", gs_directory, gs_FILENAME, gs_FILETYPE)
 	if (file_exists(gs_fcosconfigfile))
 		server_cmd("exec %s", gs_fcosconfigfile)
 
@@ -576,8 +580,12 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 }
 
 public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
-	if (valueFromPlayer < calFloatValue || valueFromPlayer > altFloatValue) {
+	if (valueFromPlayer < calFloatValue) {
+		// Below minimum — correct to minimum
 		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+	} else if (valueFromPlayer > altFloatValue) {
+		// Above maximum — correct to maximum
+		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, altFloatValue, gs_altvalues[cvar_index - MIN_MAX_CVAR_START])
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)

@@ -2,6 +2,17 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.17] - 2026-02-25
+
+### Range Cvar Correction Fix + Buffer Safety
+
+**Fixed:**
+- Range cvars (lightgamma, cl_updaterate, cl_cmdrate, rate, ex_interp, fps_max, etc.) always corrected to **minimum** even when player's value exceeded the **maximum**. Now correctly corrects to the nearest bound.
+- Hardcoded buffer sizes in `get_configsdir()` (32 instead of 63) and `formatex()` (57 instead of 127) replaced with `charsmax()` to use actual buffer capacity
+- Header comment version/date now matches `#define VERSION`
+
+---
+
 ## [7.16] - 2026-02-20
 
 ### Index Out of Bounds Fix
