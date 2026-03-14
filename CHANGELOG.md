@@ -2,6 +2,59 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.20] - 2026-03-13
+
+### Discord Task Leak Fix + Cleanup
+
+**Fixed:**
+- **Discord task leak caused doubled notifications on player interleave** — `set_task(DISCORD_DELAY, "send_discord_violations")` used no task ID, so switching players created orphaned timer tasks that fired independently, sending duplicate Discord embeds. Now uses per-player task IDs (`id + TASK_DISCORD_SEND`) with proper `remove_task` on player switch and disconnect.
+- **`task_deferred_enforce` accessed `g_deferPending` with invalid index on bounds-check failure** — Error path cleared bitmask arrays using the same `id` that just failed the `id < 1 || id > MAX_PLAYERS` bounds check, risking out-of-bounds array access. Now returns immediately without array access.
+- **Chat/Discord announcements showed rate cvars with unnecessary decimals** — Network cvars (rate, cl_cmdrate, cl_updaterate) displayed as `100000.000` instead of `100000`. Now uses integer format for values >= 100, matching the enforcement path.
+- **Stale comment on standard cvar rotation** — Comment said "every 10 seconds" but actual interval is 1.0s per `STANDARD_CHECK_INTERVAL`.
+
+**Changed:**
+- `fn_enforce_cvar` from `public` to `stock` — only called internally, never by the engine.
+
+**Removed:**
+- Unused `s_CALVALUE` parameter from `fn_enforce_cvar` — was passed through but never read inside the function.
+- Dead `g_deferToAlt` array — only existed to reconstruct the removed `s_CALVALUE` parameter.
+
+---
+
+## [7.19] - 2026-03-12
+
+### Deferred Enforcement Queue + Cleanup
+
+**Fixed:**
+- **Multiple simultaneous cvar violations dropped — only last enforced** — `defer_enforcement` used a single-slot per player: `remove_task` + `set_task(0.0)` overwrote the deferred data for each new violation, so only the last one was enforced. During initial 34-cvar scan or when multiple violations arrived in the same frame, earlier violations were silently lost. Replaced with per-cvar bitmask queue (`g_deferPending` + `g_deferPendingHi`) that accumulates all pending violations and processes them all in `task_deferred_enforce`.
+- **`gi_cvarnum` global loop variable could be clobbered** — Used as the loop variable in `client_cvar_changed`, but being a global meant any reentrant or interleaved call path could clobber it. Replaced with a local `ci` variable.
+- **`fn_loopquery` missing bot/HLTV guard** — If a bot or HLTV index somehow reached `fn_loopquery`, `query_client_cvar` would be called against a non-real client. Added `is_user_bot()` and `is_user_hltv()` checks.
+- **`fn_msginitial` missing bounds check** — No `id < 1 || id > MAX_PLAYERS` guard, unlike all other task handlers. Added for consistency.
+- **Hardcoded m_pitch values not using constants** — Enforcement path used `"-0.022"` and `"0.022"` string literals instead of `inverse_p` and `gs_calvalues[17]`. Now uses the defined constants.
+- **Stale comments on monitoring intervals** — Function comments said "every 2 seconds" and "every 10 seconds" but actual intervals are 0.5s and 1.0s respectively. Fixed to match `PRIORITY_CHECK_INTERVAL` and `STANDARD_CHECK_INTERVAL` defines.
+- **Discord description buffer too small** — 1024-byte buffer could truncate when 32 violations are buffered (~85 chars each). Increased to 2048 bytes.
+- **`ktp_discord.inc` embed description truncated to 383 chars** — `escapedDesc[384]` local buffer in `ktp_discord_send_embed_audit` silently truncated descriptions beyond 383 chars. Now uses global `g_ktpDiscordEscapedBuf[2200]`. Payload buffer increased to 3072. (ktp_discord.inc v1.3.4)
+- **Removed dead `QUERIES_PER_TICK` define** — Unused leftover from pre-rotation design.
+- **`gs_altvalues` index guard in `task_deferred_enforce`** — Added `idx >= MIN_MAX_CVAR_START` check before accessing `gs_altvalues[idx - MIN_MAX_CVAR_START]` to prevent negative index if `g_deferToAlt` is unexpectedly true for an exact cvar.
+- **Hardcoded m_pitch index 17 → `M_PITCH_INDEX` constant** — Explicit define prevents silent breakage if cvar array is reordered.
+
+**Also recompiled:** KTPMatchHandler, KTPAdminAudit, KTPFileChecker, KTPHLTVRecorder (pick up ktp_discord.inc v1.3.4 buffer increase).
+
+---
+
+## [7.18] - 2026-03-12
+
+### Enforcement Accuracy Fixes
+
+**Fixed:**
+- **Rate limiter dropped legitimate cvar events** — The 1-second per-player gate in `client_cvar_changed` silently swallowed real cvar change events if multiple cvars changed within the same second. Removed — deferred enforcement already prevents frame freezes, making the rate limit unnecessary and harmful.
+- **Enforcement flag suppressed ALL cvar events** — `gb_enforcing_cvar` was a simple boolean that blocked the next `client_cvar_changed` callback regardless of which cvar it was for. If the enforcement response for cvar A arrived and a real change to cvar B happened in the same window, B was silently dropped. Changed to store the enforced cvar name and only skip events matching that specific cvar.
+- **Uncached `get_cvar_num("ktp_match_competitive")` on every enforcement** — Called on every `fn_enforce_cvar` invocation for `hud_takesshots` checks. Now cached via `get_cvar_pointer` at init with lazy re-cache if KTPMatchHandler loads after CvarChecker.
+- **Dead store in `fn_msginitial`** — `get_user_name()` result stored to `gs_logname` but never used in the function. Removed.
+- **`bool:` tag mismatch on `equal()` return** — `new bool:is_pitch = equal(...)` caused compiler warning 213 since `equal()` returns untagged cell. Changed to untagged `new is_pitch`.
+
+---
+
 ## [7.17] - 2026-02-25
 
 ### Range Cvar Correction Fix + Buffer Safety

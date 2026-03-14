@@ -2,10 +2,31 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.17
- *   Release Date:      2026-02-25
+ *   Current Version:   7.20
+ *   Release Date:      2026-03-13
  *
  *   Changelog:
+ *   7.20 2026-03-13 - Discord task leak fix + cleanup
+ *                    * FIXED: Discord task leak caused doubled notifications on player interleave
+ *                    * FIXED: task_deferred_enforce accessed g_deferPending with invalid index on bounds-check failure
+ *                    * FIXED: Chat/Discord announcements showed rate cvars with unnecessary decimals (100000.00 → 100000)
+ *                    * FIXED: Stale comment on standard cvar rotation interval
+ *                    * CHANGED: fn_enforce_cvar from public to stock (internal-only function)
+ *                    * REMOVED: Unused s_CALVALUE parameter from fn_enforce_cvar
+ *                    * REMOVED: Dead g_deferToAlt array (no longer needed after s_CALVALUE removal)
+ *   7.19 2026-03-12 - Deferred enforcement queue + cleanup
+ *                    * FIXED: Multiple simultaneous cvar violations dropped — only last enforced
+ *                    * FIXED: gi_cvarnum global loop variable could be clobbered across calls
+ *                    * FIXED: fn_loopquery missing bot/HLTV guard
+ *                    * FIXED: fn_msginitial missing bounds check
+ *                    * FIXED: Hardcoded m_pitch values not using constants
+ *                    * FIXED: Stale comments on monitoring intervals
+ *                    * FIXED: Discord description buffer too small for 32 violations
+ *   7.18 2026-03-12 - Enforcement accuracy fixes
+ *                    * FIXED: Rate limiter dropped legitimate cvar events within 1-second window
+ *                    * FIXED: Enforcement flag suppressed ALL cvar events, not just the enforced cvar
+ *                    * FIXED: Uncached get_cvar_num("ktp_match_competitive") on every enforcement
+ *                    * FIXED: Dead store in fn_msginitial (get_user_name result unused)
  *   7.17 2026-02-25 - Range cvar correction fix + buffer safety
  *                    * FIXED: Range cvars always corrected to minimum even when value exceeds maximum
  *                    * FIXED: Hardcoded buffer sizes in get_configsdir/formatex replaced with charsmax()
@@ -103,7 +124,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.17";
+new const gs_VERSION[] = "7.20";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2026;
 
@@ -127,11 +148,11 @@ new const Float: FLOAT_PRECISION = 0.00005;
 #define MIN_MAX_CVAR_START 26
 #define ALT_VALUES_COUNT 8
 
-// Queries per tick (engine only processes ~1 callback per frame)
-#define QUERIES_PER_TICK 1
+// Enforcement cvar name length
+#define ENFORCE_CVAR_LEN 32
 
-// Rate limiting
-#define CHECK_RATE_LIMIT 1  // Minimum 1 second between checks per player
+// m_pitch index in gs_cvars[] array — must match array position
+#define M_PITCH_INDEX 17
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
 #define PRIORITY_CHECK_INTERVAL 0.5   // Priority cvar rotation: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
@@ -144,6 +165,7 @@ new const Float: FLOAT_PRECISION = 0.00005;
 #define DISCORD_DELAY 5.0          // Delay to batch violations before sending Discord
 #define MAX_CVAR_VIOLATIONS 32     // Max unique cvars to buffer per player
 #define MAX_CVAR_NAME_LEN 32       // Max cvar name length
+#define TASK_DISCORD_SEND 4000     // Task ID offset for Discord send timer
 
 // ============================================================================
 // CVAR POINTERS
@@ -151,6 +173,7 @@ new const Float: FLOAT_PRECISION = 0.00005;
 
 // Discord toggle (separate from global discord.ini - allows disabling cvar spam specifically)
 new gp_cvar_discord
+new gp_cvar_match_competitive
 
 // Discord config now loaded via ktp_discord.inc
 
@@ -161,8 +184,7 @@ new gp_cvar_discord
 new bool:gb_FirstCheckComplete[MAX_PLAYERS + 1]
 new bool:gb_StopChecking[MAX_PLAYERS + 1]
 new gi_cvarnumID[MAX_PLAYERS + 1]
-new gi_last_check_time[MAX_PLAYERS + 1]
-new bool:gb_enforcing_cvar[MAX_PLAYERS + 1]
+new gs_enforcing_cvar[MAX_PLAYERS + 1][ENFORCE_CVAR_LEN]
 
 // Periodic monitoring state
 new gi_priority_cvar_index[MAX_PLAYERS + 1]  // Current index in priority cvar rotation
@@ -174,12 +196,12 @@ new bool:gb_filterstuff_warned[MAX_PLAYERS + 1][TOTAL_CVARS]  // Already showed 
 #define MAX_ENFORCE_ATTEMPTS 3  // After this many attempts, show cl_filterstuffcmd warning
 
 // Deferred enforcement (moves expensive work out of opcode handler to prevent frame freezes)
+// Uses per-cvar bitmask to queue multiple violations per player per frame
 #define TASK_DEFER_ENFORCE 3000
-new g_deferCvarIndex[MAX_PLAYERS + 1]
-new g_deferCvarName[MAX_PLAYERS + 1][MAX_CVAR_NAME_LEN]
-new Float:g_deferValue[MAX_PLAYERS + 1]
-new Float:g_deferCalValue[MAX_PLAYERS + 1]
-new g_deferCalStr[MAX_PLAYERS + 1][16]
+new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
+new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-1: cvar indices 32-33
+new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
+new Float:g_deferCalValue[MAX_PLAYERS + 1][TOTAL_CVARS]  // target float value per cvar
 
 // ============================================================================
 // GLOBAL VARIABLES
@@ -210,7 +232,7 @@ new bool:g_discordPending
 // CVAR CHECKING ARRAYS
 // ============================================================================
 
-// Priority cvars: checked every 2 seconds (movement/network/performance exploits)
+// Priority cvars: checked every 0.5 seconds (movement/network/performance exploits)
 new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 "m_pitch", "cl_pitchdown", "cl_pitchup", "cl_updaterate", "cl_cmdrate",
 "rate", "ex_interp", "cl_lc", "cl_lw"
@@ -228,7 +250,7 @@ new gs_cvars[TOTAL_CVARS][] = {
 "cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
-// Standard cvars (non-priority): checked via rotation every 10 seconds
+// Standard cvars (non-priority): checked via rotation every 1.0 seconds
 // Excludes the 9 priority cvars listed above
 #define STANDARD_CVARS_COUNT 25
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
@@ -250,9 +272,6 @@ new gs_altvalues[ALT_VALUES_COUNT][] = {
 "3", "0.1", "0.011", "200", "500", "1000000", "0.03", "750"
 }
 
-// Cvar loop variable
-new gi_cvarnum
-
 // Pre-converted float arrays (performance optimization)
 new Float:gf_calvalues[TOTAL_CVARS]
 new Float:gf_altvalues[ALT_VALUES_COUNT]
@@ -273,6 +292,9 @@ public plugin_init() {
 	// Register /cvar command for manual cvar check
 	register_clcmd("say /cvar", "cmd_manual_check")
 	register_clcmd("say_team /cvar", "cmd_manual_check")
+
+	// Cache KTPMatchHandler's competitive mode cvar (may not exist yet at plugin_init)
+	gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
 
 	register_dictionary("ktp_cvar.txt")
 	get_configsdir(gs_directory, charsmax(gs_directory))
@@ -309,7 +331,7 @@ public fn_servermessage() {
 		server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG2")
 
 	server_print("[%s] Monitoring %d cvars with priority-based system:", gs_PLUGIN, TOTAL_CVARS)
-	server_print("[%s] - Priority cvars (%d): checked every %.0f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
+	server_print("[%s] - Priority cvars (%d): checked every %.1f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
 	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", gs_PLUGIN, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
 	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", gs_PLUGIN, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
 }
@@ -335,31 +357,25 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 	if (!gb_FirstCheckComplete[id])
 		return PLUGIN_CONTINUE
 
-	// Skip if we just enforced this cvar
-	if (gb_enforcing_cvar[id]) {
-		gb_enforcing_cvar[id] = false
+	// Skip if we just enforced this specific cvar (prevents re-triggering on our own correction)
+	if (gs_enforcing_cvar[id][0] && equal(cvar, gs_enforcing_cvar[id])) {
+		gs_enforcing_cvar[id][0] = 0
 		return PLUGIN_CONTINUE
 	}
 
-	// Rate limiting (max 1 check per second per player)
-	new current_time = get_systime()
-	if (current_time - gi_last_check_time[id] < CHECK_RATE_LIMIT)
-		return PLUGIN_CONTINUE
-	gi_last_check_time[id] = current_time
-
 	// Find and validate this cvar
-	for (gi_cvarnum = 0; gi_cvarnum < TOTAL_CVARS; gi_cvarnum++) {
-		if (equal(cvar, gs_cvars[gi_cvarnum])) {
+	for (new ci = 0; ci < TOTAL_CVARS; ci++) {
+		if (equal(cvar, gs_cvars[ci])) {
 			new Float:valueFromPlayer = floatstr(value)
 
-			if (gi_cvarnum >= MIN_MAX_CVAR_START) {
-				fn_checkaltallowed(id, gi_cvarnum, cvar, valueFromPlayer,
-					gf_calvalues[gi_cvarnum], gf_altvalues[gi_cvarnum - MIN_MAX_CVAR_START],
-					value, gs_calvalues[gi_cvarnum])
+			if (ci >= MIN_MAX_CVAR_START) {
+				fn_checkaltallowed(id, ci, cvar, valueFromPlayer,
+					gf_calvalues[ci], gf_altvalues[ci - MIN_MAX_CVAR_START],
+					value, gs_calvalues[ci])
 			}
 			else {
-				fn_checkvalues(id, gi_cvarnum, cvar, valueFromPlayer,
-					gf_calvalues[gi_cvarnum], value, gs_calvalues[gi_cvarnum])
+				fn_checkvalues(id, ci, cvar, valueFromPlayer,
+					gf_calvalues[ci], value, gs_calvalues[ci])
 			}
 			break
 		}
@@ -373,10 +389,8 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 // ============================================================================
 
 public fn_msginitial(id) {
-	if (!is_user_connected(id))
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id))
 		return
-
-	get_user_name(id, gs_logname, 31)
 
 	client_print(id, print_chat, "%s version %s by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
 }
@@ -403,8 +417,16 @@ public client_disconnected(id) {
 	remove_task(id + 1000)  // priority monitoring task
 	remove_task(id + 2000)  // standard monitoring task
 	remove_task(id + TASK_DEFER_ENFORCE)  // deferred enforcement task
+	g_deferPending[id] = 0
+	g_deferPendingHi[id] = 0
 	gb_FirstCheckComplete[id] = false
-	gi_last_check_time[id] = 0
+	gs_enforcing_cvar[id][0] = 0
+
+	// Flush any pending Discord violations for this player
+	if (g_discordPending && g_discordPlayerId == id) {
+		remove_task(id + TASK_DISCORD_SEND)
+		send_discord_violations(0)
+	}
 
 	// Reset enforcement tracking
 	for (new i = 0; i < TOTAL_CVARS; i++) {
@@ -431,7 +453,7 @@ public cmd_manual_check(id) {
 // ============================================================================
 
 public fn_loopquery(id) {
-	if (id < 1 || id > MAX_PLAYERS) return
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || is_user_bot(id) || is_user_hltv(id)) return
 	gi_cvarnumID[id] = 0
 	fn_query_parallel(id)
 }
@@ -493,8 +515,8 @@ public fn_firstcomplete(id) {
 
 /**
  * Start periodic monitoring after initial check completes
- * Priority cvars: checked every 2 seconds
- * Standard cvars: rotated through every 10 seconds
+ * Priority cvars: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
+ * Standard cvars: 1 cvar every 1.0s (full cycle: 25s for 25 cvars)
  */
 public fn_start_monitoring(id) {
 	if (id < 1 || id > MAX_PLAYERS) return
@@ -506,17 +528,17 @@ public fn_start_monitoring(id) {
 		gb_FirstCheckComplete[id] = true
 	}
 
-	// Start priority cvar checks (repeating every 2 seconds)
+	// Start priority cvar checks (repeating every 0.5 seconds, one cvar per tick)
 	set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id + 1000, "", 0, "b")
 
-	// Start standard cvar rotation (repeating every 10 seconds)
+	// Start standard cvar rotation (repeating every 1.0 seconds, one cvar per tick)
 	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id + 2000, "", 0, "b")
 
 	log_amx("[%s] Periodic monitoring started for player %d (priority taskid=%d, standard taskid=%d)", gs_PLUGIN, id, id + 1000, id + 2000)
 }
 
 /**
- * Check all priority cvars (called every 2 seconds)
+ * Check one priority cvar per call (called every 0.5 seconds)
  * These are the most critical anti-cheat cvars
  */
 public fn_check_priority_cvars(taskid) {
@@ -534,8 +556,8 @@ public fn_check_priority_cvars(taskid) {
 }
 
 /**
- * Check standard cvars via rotation (called every 10 seconds)
- * Queries 5 cvars each time, cycling through all standard cvars
+ * Check one standard cvar per call (called every 1.0 seconds)
+ * Cycles through all standard cvars via rotation
  */
 public fn_check_standard_cvars(taskid) {
 	new id = taskid - 2000
@@ -572,7 +594,7 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	}
 
 	if (isInvalid) {
-		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		defer_enforcement(id, cvar_index, valueFromPlayer, calFloatValue)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
@@ -582,10 +604,10 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
 	if (valueFromPlayer < calFloatValue) {
 		// Below minimum — correct to minimum
-		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, calFloatValue, s_CALVALUE)
+		defer_enforcement(id, cvar_index, valueFromPlayer, calFloatValue)
 	} else if (valueFromPlayer > altFloatValue) {
 		// Above maximum — correct to maximum
-		defer_enforcement(id, cvar_index, s_CVARNAME, valueFromPlayer, altFloatValue, gs_altvalues[cvar_index - MIN_MAX_CVAR_START])
+		defer_enforcement(id, cvar_index, valueFromPlayer, altFloatValue)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
@@ -597,16 +619,19 @@ public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPl
  * Moves expensive work (get_user_*, log_amx, client_print broadcast) out of the
  * clc_cvarvalue2 opcode handler to prevent 160-185ms server frame freezes.
  */
-stock defer_enforcement(id, cvar_index, const s_CVARNAME[], Float:valueFromPlayer, Float:calFloatValue, const s_CALVALUE[]) {
-	g_deferCvarIndex[id] = cvar_index
-	copy(g_deferCvarName[id], MAX_CVAR_NAME_LEN - 1, s_CVARNAME)
-	g_deferValue[id] = valueFromPlayer
-	g_deferCalValue[id] = calFloatValue
-	copy(g_deferCalStr[id], 15, s_CALVALUE)
+stock defer_enforcement(id, cvar_index, Float:valueFromPlayer, Float:calFloatValue) {
+	// Set pending bit for this cvar index
+	if (cvar_index < 32)
+		g_deferPending[id] |= (1 << cvar_index)
+	else
+		g_deferPendingHi[id] |= (1 << (cvar_index - 32))
 
-	// Schedule for next frame (removes any existing deferred task for this player)
-	remove_task(id + TASK_DEFER_ENFORCE)
-	set_task(0.0, "task_deferred_enforce", id + TASK_DEFER_ENFORCE)
+	// Store per-cvar data
+	g_deferValue[id][cvar_index] = valueFromPlayer
+	g_deferCalValue[id][cvar_index] = calFloatValue
+	// Schedule for next frame (only if not already scheduled)
+	if (!task_exists(id + TASK_DEFER_ENFORCE))
+		set_task(0.0, "task_deferred_enforce", id + TASK_DEFER_ENFORCE)
 }
 
 public task_deferred_enforce(taskid) {
@@ -614,8 +639,23 @@ public task_deferred_enforce(taskid) {
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id))
 		return
 
-	fn_enforce_cvar(id, g_deferCvarIndex[id], g_deferCvarName[id],
-		g_deferValue[id], g_deferCalValue[id], g_deferCalStr[id])
+	// Process all pending cvar violations for this player
+	for (new idx = 0; idx < TOTAL_CVARS; idx++) {
+		new pending
+		if (idx < 32)
+			pending = g_deferPending[id] & (1 << idx)
+		else
+			pending = g_deferPendingHi[id] & (1 << (idx - 32))
+
+		if (!pending)
+			continue
+
+		fn_enforce_cvar(id, idx, gs_cvars[idx],
+			g_deferValue[id][idx], g_deferCalValue[id][idx])
+	}
+
+	g_deferPending[id] = 0
+	g_deferPendingHi[id] = 0
 }
 
 // Reset enforcement tracking when cvar becomes valid
@@ -630,14 +670,19 @@ stock fn_reset_enforce_tracking(id, cvar_index) {
 // ENFORCEMENT & PUNISHMENT
 // ============================================================================
 
-public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_CALVALUE[]) {
+stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue) {
 	if (gb_StopChecking[id])
 		return PLUGIN_CONTINUE
 
 	// Skip hud_takesshots enforcement for non-competitive matches (12man, scrim, draft)
 	// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
-	if (equal(s_CVARNAME, "hud_takesshots") && get_cvar_num("ktp_match_competitive") == 0)
-		return PLUGIN_CONTINUE
+	if (equal(s_CVARNAME, "hud_takesshots")) {
+		// Re-cache pointer if not found at init (KTPMatchHandler may load after us)
+		if (!gp_cvar_match_competitive)
+			gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
+		if (gp_cvar_match_competitive && get_pcvar_num(gp_cvar_match_competitive) == 0)
+			return PLUGIN_CONTINUE
+	}
 
 	// Increment enforcement attempt counter
 	gi_enforce_attempts[id][cvar_index]++
@@ -699,17 +744,17 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 		return PLUGIN_CONTINUE
 	}
 
-	new bool:is_pitch = equal(s_CVARNAME, gs_pitch)
+	new is_pitch = equal(s_CVARNAME, gs_pitch)
 
-	// Set enforcement flag to prevent recursion
-	gb_enforcing_cvar[id] = bool:true
+	// Store enforced cvar name to prevent recursion (only skips this specific cvar's response)
+	copy(gs_enforcing_cvar[id], ENFORCE_CVAR_LEN - 1, s_CVARNAME)
 
 	// Force correct value on client
 	if (is_pitch && (valueFromPlayer < 0.0)) {
-		client_cmd(id, "%s -0.022", s_CVARNAME)
+		client_cmd(id, "%s %s", s_CVARNAME, inverse_p)
 	}
 	else if (is_pitch && (valueFromPlayer >= 0.0)) {
-		client_cmd(id, "%s 0.022", s_CVARNAME)
+		client_cmd(id, "%s %s", s_CVARNAME, gs_calvalues[M_PITCH_INDEX])
 	}
 	else if (calFloatValue >= 100.0) {
 		new intValue = floatround(calFloatValue, floatround_floor)
@@ -722,8 +767,11 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 	// Log violation
 	log_amx("%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
 
-	// Announce to all players
-	client_print(0, print_chat, "[%s] %s had invalid %s (%.2f) - corrected to %.2f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
+	// Announce to all players (use integer format for large values like rate/cmdrate)
+	if (calFloatValue >= 100.0)
+		client_print(0, print_chat, "[%s] %s had invalid %s (%d) - corrected to %d", gs_PLUGIN, gs_logname, s_CVARNAME, floatround(valueFromPlayer, floatround_floor), floatround(calFloatValue, floatround_floor))
+	else
+		client_print(0, print_chat, "[%s] %s had invalid %s (%.3f) - corrected to %.3f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
 	// Buffer violation for grouped Discord notification
 	// Only if ktp_cvar_discord is enabled (disabled by default to reduce spam)
@@ -746,9 +794,10 @@ public fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlaye
 stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:corrected_value) {
 	// Check if this is a new player or same player
 	if (g_discordPlayerId != id) {
-		// Send any pending violations for previous player
+		// Send any pending violations for previous player immediately
 		if (g_discordPending) {
-			send_discord_violations()
+			remove_task(g_discordPlayerId + TASK_DISCORD_SEND)
+			send_discord_violations(0)
 		}
 
 		// Start buffering for new player
@@ -782,24 +831,23 @@ stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:
 		g_discordViolationCount++
 	}
 
-	// Schedule Discord send (will be called after violations settle)
-	if (!g_discordPending) {
-		g_discordPending = true
-		set_task(DISCORD_DELAY, "send_discord_violations")
-	}
+	// Schedule Discord send with per-player task ID (reset timer on each new violation)
+	remove_task(id + TASK_DISCORD_SEND)
+	g_discordPending = true
+	set_task(DISCORD_DELAY, "send_discord_violations", id + TASK_DISCORD_SEND)
 }
 
 /**
  * Send buffered violations as a single grouped Discord embed
  */
-public send_discord_violations() {
+public send_discord_violations(taskid) {
 	g_discordPending = false
 
 	if (g_discordViolationCount == 0)
 		return
 
 	// Build description with all cvars
-	new description[1024]
+	new description[2048]
 	new pos = 0
 
 	// Calculate total violations (sum of all counts)
@@ -812,20 +860,31 @@ public send_discord_violations() {
 		"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n**Violations (%d total, %d unique):**^n",
 		g_discordPlayerName, g_discordPlayerAuthid, g_discordPlayerIp, total_violations, g_discordViolationCount)
 
-	// Add cvar list
+	// Add cvar list (use integer format for large values like rate/cmdrate)
 	for (new i = 0; i < g_discordViolationCount && pos < charsmax(description) - 100; i++) {
+		new bool:isLarge = (g_discordCvarCorrected[i] >= 100.0)
 		if (g_discordCvarCounts[i] > 1) {
-			// Repeat violation - show count
-			pos += formatex(description[pos], charsmax(description) - pos,
-				"• **%s** (x%d): %.3f → %.3f^n",
-				g_discordCvarNames[i], g_discordCvarCounts[i],
-				g_discordCvarValues[i], g_discordCvarCorrected[i])
+			if (isLarge)
+				pos += formatex(description[pos], charsmax(description) - pos,
+					"• **%s** (x%d): %d → %d^n",
+					g_discordCvarNames[i], g_discordCvarCounts[i],
+					floatround(g_discordCvarValues[i], floatround_floor), floatround(g_discordCvarCorrected[i], floatround_floor))
+			else
+				pos += formatex(description[pos], charsmax(description) - pos,
+					"• **%s** (x%d): %.3f → %.3f^n",
+					g_discordCvarNames[i], g_discordCvarCounts[i],
+					g_discordCvarValues[i], g_discordCvarCorrected[i])
 		} else {
-			// Single violation
-			pos += formatex(description[pos], charsmax(description) - pos,
-				"• **%s**: %.3f → %.3f^n",
-				g_discordCvarNames[i],
-				g_discordCvarValues[i], g_discordCvarCorrected[i])
+			if (isLarge)
+				pos += formatex(description[pos], charsmax(description) - pos,
+					"• **%s**: %d → %d^n",
+					g_discordCvarNames[i],
+					floatround(g_discordCvarValues[i], floatround_floor), floatround(g_discordCvarCorrected[i], floatround_floor))
+			else
+				pos += formatex(description[pos], charsmax(description) - pos,
+					"• **%s**: %.3f → %.3f^n",
+					g_discordCvarNames[i],
+					g_discordCvarValues[i], g_discordCvarCorrected[i])
 		}
 	}
 
