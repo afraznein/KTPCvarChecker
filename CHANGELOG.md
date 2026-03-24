@@ -2,6 +2,34 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.22] - 2026-03-24
+
+### Enforcement Range Adjustments
+
+**Changed:**
+- **`rate` locked to exact 100000** — Was enforced as a range (100000-1000000). Now only `rate 100000` is accepted. Players with higher or lower rate values are auto-corrected.
+- **`cl_updaterate` max lowered from 200 to 120** — Matches `sv_maxupdaterate 120` on all servers. Client.dll clamps to 102 anyway, so the effective ceiling is unchanged.
+- **`ex_interp` range adjusted to 0.01-0.05** — Floor raised from 0 to 0.01 (1 update frame minimum buffer, prevents teleporting on any jitter). Max raised from 0.03 to 0.05 (accommodates SA/EU players with 140-160ms ping).
+
+**Removed:**
+- **`cl_smoothtime` enforcement removed** — Purely cosmetic cvar controlling own-character position smoothing. No competitive advantage; removing enforcement lets players choose their own smoothing preference (recommended 0.05 or 0 in Discord guide).
+- **`lightgamma` floor adjusted from 1.81 to 1.809** — IEEE 754 float precision: `1.81` is stored as `1.80999994` and reported back as `1.809` by the engine. The old floor flagged correctly-set players as violations. `1.809` matches the engine's actual representation while still protecting against the <1.81 crash threshold.
+
+---
+
+## [7.21] - 2026-03-24
+
+### Performance Optimizations
+
+**Changed:**
+- **Cvar name → index lookup via Trie** — `client_cvar_changed` and `fn_querycvar` used a 34-entry `equal()` linear scan on every callback (~43 callbacks/sec/player at steady state). Replaced with a `TrieGetCell` hash lookup — O(1) instead of O(n). Single highest-impact optimization.
+- **m_pitch check uses integer index compare** — `fn_checkvalues` compared `equal(s_CVARNAME, gs_pitch)` (string walk) on every exact-cvar validation. Now compares `cvar_index == M_PITCH_INDEX` (single instruction).
+- **hud_takesshots check uses integer index compare** — Same pattern in `fn_enforce_cvar`. `equal(s_CVARNAME, "hud_takesshots")` → `cvar_index == HUD_TAKESSHOTS_INDEX`.
+- **Disconnect enforcement reset uses dirty flag** — The 34-iteration `gi_enforce_attempts`/`gb_filterstuff_warned` reset loop in `client_disconnected` now only runs if `gb_hasViolations[id]` is true. Most disconnecting players have zero violations, making the common case O(1).
+- **Removed per-player `log_amx` on monitoring start** — Eliminated 24 `log_amx` disk writes per match connect wave (one per player × 24 players).
+
+---
+
 ## [7.20] - 2026-03-13
 
 ### Discord Task Leak Fix + Cleanup

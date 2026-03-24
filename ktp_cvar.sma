@@ -2,10 +2,21 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.20
- *   Release Date:      2026-03-13
+ *   Current Version:   7.22
+ *   Release Date:      2026-03-24
  *
  *   Changelog:
+ *   7.22 2026-03-24 - Enforcement range adjustments
+ *                    * CHANGED: rate locked to exact 100000 (was range 100000-1000000)
+ *                    * CHANGED: cl_updaterate max lowered from 200 to 120 (matches sv_maxupdaterate)
+ *                    * CHANGED: ex_interp range adjusted to 0.01-0.05 (was 0-0.03)
+ *                    - REMOVED: cl_smoothtime enforcement (purely cosmetic, no competitive advantage)
+ *                    - REMOVED: Dead gs_pitch constant (replaced by integer index in v7.21)
+ *   7.21 2026-03-24 - Performance optimizations
+ *                    * CHANGED: Cvar name lookup via Trie O(1) hash (was O(n) 34-entry linear scan)
+ *                    * CHANGED: m_pitch/hud_takesshots checks use integer index compare (was string compare)
+ *                    * CHANGED: Disconnect enforcement reset uses dirty flag (skips 34-iteration loop for clean players)
+ *                    * REMOVED: Per-player log_amx on monitoring start (24 disk writes per match connect wave)
  *   7.20 2026-03-13 - Discord task leak fix + cleanup
  *                    * FIXED: Discord task leak caused doubled notifications on player interleave
  *                    * FIXED: task_deferred_enforce accessed g_deferPending with invalid index on bounds-check failure
@@ -124,7 +135,7 @@
 // ============================================================================
 
 new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.20";
+new const gs_VERSION[] = "7.22";
 new const gs_AUTHOR[] = "Nein_";
 new const gs_year     = 2026;
 
@@ -136,22 +147,22 @@ new const gs_year     = 2026;
 new const gs_FILENAME[] = "ktp_cvar";
 new const gs_FILETYPE[] = ".cfg";
 
-// Special cvar names
-new const gs_pitch[] = "m_pitch";
+// Special cvar values
 new const inverse_p[] = "-0.022";
 
 // Precision constant for float comparisons
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 34
+#define TOTAL_CVARS 33
 #define MIN_MAX_CVAR_START 26
-#define ALT_VALUES_COUNT 8
+#define ALT_VALUES_COUNT 7
 
 // Enforcement cvar name length
 #define ENFORCE_CVAR_LEN 32
 
-// m_pitch index in gs_cvars[] array — must match array position
+// Cvar indices in gs_cvars[] array — must match array positions
+#define HUD_TAKESSHOTS_INDEX 16
 #define M_PITCH_INDEX 17
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
@@ -175,6 +186,9 @@ new const Float: FLOAT_PRECISION = 0.00005;
 new gp_cvar_discord
 new gp_cvar_match_competitive
 
+// KTP: Trie for O(1) cvar name → index lookup (replaces O(n) linear scan)
+new Trie:g_cvarIndexTrie
+
 // Discord config now loaded via ktp_discord.inc
 
 // ============================================================================
@@ -193,6 +207,7 @@ new gi_standard_cvar_index[MAX_PLAYERS + 1]  // Current index in standard cvar r
 // Enforcement attempt tracking (detect cl_filterstuffcmd blocking)
 new gi_enforce_attempts[MAX_PLAYERS + 1][TOTAL_CVARS]  // Count of failed enforcement attempts per cvar
 new bool:gb_filterstuff_warned[MAX_PLAYERS + 1][TOTAL_CVARS]  // Already showed warning for this cvar
+new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement reset on disconnect if no violations
 #define MAX_ENFORCE_ATTEMPTS 3  // After this many attempts, show cl_filterstuffcmd warning
 
 // Deferred enforcement (moves expensive work out of opcode handler to prevent frame freezes)
@@ -239,37 +254,37 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 }
 
 // All cvars (for initial check and reference)
-// Indices 0-25: exact value cvars, indices 26-33: range cvars (min/max)
+// Indices 0-25: exact value cvars, indices 26-32: range cvars (min/max)
 new gs_cvars[TOTAL_CVARS][] = {
 "cl_bobcycle", "cl_bobup", "cl_lc", "cl_lw", "cl_mousegrab",
 "cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
 "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
 "gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
 "r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
-"texgamma", "lightgamma", "cl_smoothtime", "cl_bob", "cl_updaterate",
+"texgamma", "lightgamma", "cl_bob", "cl_updaterate",
 "cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
 // Standard cvars (non-priority): checked via rotation every 1.0 seconds
 // Excludes the 9 priority cvars listed above
-#define STANDARD_CVARS_COUNT 25
+#define STANDARD_CVARS_COUNT 24
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 "cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
 "gl_clear", "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors",
 "gl_overbright", "gl_playermip", "hud_takesshots", "r_drawentities", "r_drawviewmodel",
 "r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
-"texgamma", "lightgamma", "cl_smoothtime", "cl_bob", "fps_max"
+"texgamma", "lightgamma", "cl_bob", "fps_max"
 }
 
 new gs_calvalues[TOTAL_CVARS][] = {
 "0.8", "0.5", "1", "1", "1", "89", "89", "0", "0", "0",
 "0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
-"1", "0", "0", "0", "0", "2", "1.81", "0", "0", "100",
-"100", "100000", "0", "60"
+"1", "0", "0", "0", "0", "2", "1.809", "0", "100",
+"100", "100000", "0.009", "60"
 }
 
 new gs_altvalues[ALT_VALUES_COUNT][] = {
-"3", "0.1", "0.011", "200", "500", "1000000", "0.03", "750"
+"3", "0.011", "120", "500", "100000", "0.05", "750"
 }
 
 // Pre-converted float arrays (performance optimization)
@@ -315,6 +330,12 @@ public plugin_cfg () {
 // ============================================================================
 
 public fn_init_float_arrays() {
+	// Build cvar name → index Trie for O(1) lookup in hot paths
+	g_cvarIndexTrie = TrieCreate()
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		TrieSetCell(g_cvarIndexTrie, gs_cvars[i], i)
+	}
+
 	for (new i = 0; i < TOTAL_CVARS; i++) {
 		gf_calvalues[i] = floatstr(gs_calvalues[i])
 	}
@@ -363,21 +384,19 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 		return PLUGIN_CONTINUE
 	}
 
-	// Find and validate this cvar
-	for (new ci = 0; ci < TOTAL_CVARS; ci++) {
-		if (equal(cvar, gs_cvars[ci])) {
-			new Float:valueFromPlayer = floatstr(value)
+	// Find cvar index via Trie (O(1) hash lookup instead of O(n) linear scan)
+	new ci
+	if (TrieGetCell(g_cvarIndexTrie, cvar, ci)) {
+		new Float:valueFromPlayer = floatstr(value)
 
-			if (ci >= MIN_MAX_CVAR_START) {
-				fn_checkaltallowed(id, ci, cvar, valueFromPlayer,
-					gf_calvalues[ci], gf_altvalues[ci - MIN_MAX_CVAR_START],
-					value, gs_calvalues[ci])
-			}
-			else {
-				fn_checkvalues(id, ci, cvar, valueFromPlayer,
-					gf_calvalues[ci], value, gs_calvalues[ci])
-			}
-			break
+		if (ci >= MIN_MAX_CVAR_START) {
+			fn_checkaltallowed(id, ci, cvar, valueFromPlayer,
+				gf_calvalues[ci], gf_altvalues[ci - MIN_MAX_CVAR_START],
+				value, gs_calvalues[ci])
+		}
+		else {
+			fn_checkvalues(id, ci, cvar, valueFromPlayer,
+				gf_calvalues[ci], value, gs_calvalues[ci])
 		}
 	}
 
@@ -428,10 +447,13 @@ public client_disconnected(id) {
 		send_discord_violations(0)
 	}
 
-	// Reset enforcement tracking
-	for (new i = 0; i < TOTAL_CVARS; i++) {
-		gi_enforce_attempts[id][i] = 0
-		gb_filterstuff_warned[id][i] = false
+	// Reset enforcement tracking (only loop if player had violations)
+	if (gb_hasViolations[id]) {
+		for (new i = 0; i < TOTAL_CVARS; i++) {
+			gi_enforce_attempts[id][i] = 0
+			gb_filterstuff_warned[id][i] = false
+		}
+		gb_hasViolations[id] = false
 	}
 }
 
@@ -479,16 +501,9 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
 	if (id < 1 || id > MAX_PLAYERS) return
 	new Float:valueFromPlayer = floatstr(s_VALUE)
 
-	// Find the cvar index by name (don't rely on counter)
-	new cvar_index = -1
-	for (new i = 0; i < TOTAL_CVARS; i++) {
-		if (equal(s_CVARNAME, gs_cvars[i])) {
-			cvar_index = i
-			break
-		}
-	}
-
-	if (cvar_index < 0)
+	// Find cvar index via Trie (O(1) hash lookup instead of O(n) linear scan)
+	new cvar_index
+	if (!TrieGetCell(g_cvarIndexTrie, s_CVARNAME, cvar_index))
 		return
 
 	if (cvar_index >= MIN_MAX_CVAR_START) {
@@ -534,7 +549,7 @@ public fn_start_monitoring(id) {
 	// Start standard cvar rotation (repeating every 1.0 seconds, one cvar per tick)
 	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id + 2000, "", 0, "b")
 
-	log_amx("[%s] Periodic monitoring started for player %d (priority taskid=%d, standard taskid=%d)", gs_PLUGIN, id, id + 1000, id + 2000)
+	// Removed: log_amx per-player monitoring start — 24 disk writes per match connect wave
 }
 
 /**
@@ -580,7 +595,7 @@ public fn_check_standard_cvars(taskid) {
 public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, const s_VALUE[], const s_CALVALUE[]) {
 	new bool: isInvalid = false
 
-	if (equal(s_CVARNAME, gs_pitch)) {
+	if (cvar_index == M_PITCH_INDEX) {
 		if (!(floatabs(valueFromPlayer - calFloatValue) <= FLOAT_PRECISION ||
 			  floatabs(valueFromPlayer + calFloatValue) <= FLOAT_PRECISION ||
 			  equal(s_VALUE, inverse_p) || equal(s_VALUE, s_CALVALUE))) {
@@ -676,7 +691,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 	// Skip hud_takesshots enforcement for non-competitive matches (12man, scrim, draft)
 	// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
-	if (equal(s_CVARNAME, "hud_takesshots")) {
+	if (cvar_index == HUD_TAKESSHOTS_INDEX) {
 		// Re-cache pointer if not found at init (KTPMatchHandler may load after us)
 		if (!gp_cvar_match_competitive)
 			gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
@@ -686,6 +701,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 	// Increment enforcement attempt counter
 	gi_enforce_attempts[id][cvar_index]++
+	gb_hasViolations[id] = true
 
 	// Get player info (needed for both warning and normal enforcement)
 	get_user_name(id, gs_logname, charsmax(gs_logname))
@@ -744,7 +760,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 		return PLUGIN_CONTINUE
 	}
 
-	new is_pitch = equal(s_CVARNAME, gs_pitch)
+	new bool:is_pitch = (cvar_index == M_PITCH_INDEX)
 
 	// Store enforced cvar name to prevent recursion (only skips this specific cvar's response)
 	copy(gs_enforcing_cvar[id], ENFORCE_CVAR_LEN - 1, s_CVARNAME)
