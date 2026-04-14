@@ -2,7 +2,7 @@
 
 **Version 7.22** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
-Pure enforcement anti-cheat that monitors 34 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
+Pure enforcement anti-cheat that monitors 33 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
 Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
