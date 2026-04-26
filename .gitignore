@@ -1,7 +1,6 @@
 # Local dev files (not committed)
 /.claude
 CLAUDE.md
-compile.sh
 nul
 
 # Compiled output

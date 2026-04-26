@@ -129,14 +129,15 @@
 #include <amxmodx>
 #include <amxmisc>
 #include <ktp_discord>
+#include <ktp_version_reporter>
 
 // ============================================================================
 // PLUGIN INFORMATION
 // ============================================================================
 
-new const gs_PLUGIN[] = "KTP Cvar Checker";
-new const gs_VERSION[] = "7.22";
-new const gs_AUTHOR[] = "Nein_";
+#define PLUGIN_NAME    "KTP Cvar Checker"
+#define PLUGIN_VERSION "7.23"
+#define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
 // ============================================================================
@@ -296,8 +297,9 @@ new Float:gf_altvalues[ALT_VALUES_COUNT]
 // ============================================================================
 
 public plugin_init() {
-	register_plugin(gs_PLUGIN, gs_VERSION, gs_AUTHOR)
-	register_cvar("ktp_cvar_version", gs_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
+	register_plugin(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR)
+	KTP_RegisterVersion(PLUGIN_NAME, PLUGIN_VERSION)
+	register_cvar("ktp_cvar_version", PLUGIN_VERSION, FCVAR_SERVER | FCVAR_SPONLY)
 
 	// Discord toggle - enabled by default (now uses grouped notifications to reduce spam)
 	gp_cvar_discord = register_cvar("ktp_cvar_discord", "1")
@@ -342,19 +344,19 @@ public fn_init_float_arrays() {
 	for (new i = 0; i < ALT_VALUES_COUNT; i++) {
 		gf_altvalues[i] = floatstr(gs_altvalues[i])
 	}
-	log_amx("[%s] Pre-converted %d cvar values to floats", gs_PLUGIN, TOTAL_CVARS + ALT_VALUES_COUNT)
+	log_amx("[%s] Pre-converted %d cvar values to floats", PLUGIN_NAME, TOTAL_CVARS + ALT_VALUES_COUNT)
 }
 
 public fn_servermessage() {
-	server_print("%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", gs_PLUGIN, gs_VERSION, gs_year, gs_AUTHOR)
+	server_print("%L", LANG_SERVER, "FCOS_LANG_INFO_STARTUP", PLUGIN_NAME, PLUGIN_VERSION, gs_year, PLUGIN_AUTHOR)
 	server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG1")
 	if (file_exists(gs_fcosconfigfile))
 		server_print("%L", LANG_SERVER, "FCOS_LANG_SERVER_MSG2")
 
-	server_print("[%s] Monitoring %d cvars with priority-based system:", gs_PLUGIN, TOTAL_CVARS)
-	server_print("[%s] - Priority cvars (%d): checked every %.1f seconds", gs_PLUGIN, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
-	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", gs_PLUGIN, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
-	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", gs_PLUGIN, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
+	server_print("[%s] Monitoring %d cvars with priority-based system:", PLUGIN_NAME, TOTAL_CVARS)
+	server_print("[%s] - Priority cvars (%d): checked every %.1f seconds", PLUGIN_NAME, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
+	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", PLUGIN_NAME, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
+	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", PLUGIN_NAME, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
 }
 
 // ============================================================================
@@ -411,7 +413,7 @@ public fn_msginitial(id) {
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id))
 		return
 
-	client_print(id, print_chat, "%s version %s by %s", gs_PLUGIN, gs_VERSION, gs_AUTHOR)
+	client_print(id, print_chat, "%s version %s by %s", PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR)
 }
 
 public client_putinserver(id) {
@@ -465,7 +467,7 @@ public cmd_manual_check(id) {
 	if (!is_user_connected(id))
 		return PLUGIN_HANDLED
 
-	client_print(id, print_console, "[%s] Starting manual cvar check...", gs_PLUGIN)
+	client_print(id, print_console, "[%s] Starting manual cvar check...", PLUGIN_NAME)
 	fn_loopquery(id)
 	return PLUGIN_HANDLED
 }
@@ -709,7 +711,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
 
 	if (gs_logname[0] == 0 || gs_logauthid[0] == 0) {
-		log_amx("[%s] WARNING: Player %d disconnected before logging violation", gs_PLUGIN, id)
+		log_amx("[%s] WARNING: Player %d disconnected before logging violation", PLUGIN_NAME, id)
 		return PLUGIN_CONTINUE
 	}
 
@@ -751,10 +753,10 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 			// Log this escalation
 			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %.2f) after %d attempts",
-				gs_PLUGIN, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue, gi_enforce_attempts[id][cvar_index])
+				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue, gi_enforce_attempts[id][cvar_index])
 
 			// Announce to all players that this player is blocked
-			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot participate until fixed", gs_PLUGIN, gs_logname, s_CVARNAME)
+			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot participate until fixed", PLUGIN_NAME, gs_logname, s_CVARNAME)
 		}
 		// Don't spam - just silently skip further enforcement attempts
 		return PLUGIN_CONTINUE
@@ -785,9 +787,9 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 	// Announce to all players (use integer format for large values like rate/cmdrate)
 	if (calFloatValue >= 100.0)
-		client_print(0, print_chat, "[%s] %s had invalid %s (%d) - corrected to %d", gs_PLUGIN, gs_logname, s_CVARNAME, floatround(valueFromPlayer, floatround_floor), floatround(calFloatValue, floatround_floor))
+		client_print(0, print_chat, "[%s] %s had invalid %s (%d) - corrected to %d", PLUGIN_NAME, gs_logname, s_CVARNAME, floatround(valueFromPlayer, floatround_floor), floatround(calFloatValue, floatround_floor))
 	else
-		client_print(0, print_chat, "[%s] %s had invalid %s (%.3f) - corrected to %.3f", gs_PLUGIN, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
+		client_print(0, print_chat, "[%s] %s had invalid %s (%.3f) - corrected to %.3f", PLUGIN_NAME, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
 
 	// Buffer violation for grouped Discord notification
 	// Only if ktp_cvar_discord is enabled (disabled by default to reduce spam)

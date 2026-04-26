@@ -2,6 +2,18 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.23] - 2026-04-25
+
+### Added
+- **Adopted `ktp_version_reporter` shared include** — plugin now registers with the fleet-wide `amx_ktp_versions` rcon command (ADMIN_RCON). Output reports name, version, build SHA, and build time alongside other KTP plugins. See KTPMatchHandler 0.10.116 for the canary release introducing the include.
+- **`compile.sh` build-info generation** — git short SHA + UTC build time written to `build_info.inc` and baked into the .amxx so the rcon command can report what's actually deployed.
+
+### Changed
+- **Standardized version constants** — `gs_PLUGIN`/`gs_VERSION`/`gs_AUTHOR` `new const[]` array declarations replaced with `PLUGIN_NAME`/`PLUGIN_VERSION`/`PLUGIN_AUTHOR` `#define`s (matching every other KTP plugin's convention). All call sites updated; `gs_year` retained since it's a separate concept. No behavioral change.
+
+### Fixed
+- **`compile.sh` temp-dir nesting bug** — `cp -r src dst` accumulates nested `include/` dirs on re-runs when `dst` already exists. Pre-existing files survived from the first-ever run; new shared includes added later landed at `/tmp/ktpbuild/include/include/...` and were invisible to amxxpc. Added `rm -rf "$TEMP_BUILD"` before `mkdir`. Discovered while wiring `ktp_version_reporter`.
+
 ## [7.22] - 2026-03-24
 
 ### Enforcement Range Adjustments
