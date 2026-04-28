@@ -2,6 +2,58 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.24] - 2026-04-28
+
+### Added — Reverted v7.13 over-removal: 7 cvars re-added
+
+A 2026-04-28 audit of the 25 cvars dropped from enforcement in v7.13 (2026-02-17) found 7 that were misclassified as "engine-limited values" or "not policed." They actually register with `pfnRegisterVariable(name, default, 0)` — flag `0` means no `FCVAR_SERVER`, no engine-side clamp. The client can set them to any value, and several have known competitive-anticheat impact.
+
+Re-added cvars (all to standard rotation, exact-match enforcement = GoldSrc default):
+
+| Cvar | Value | Family | Defeats |
+|---|---|---|---|
+| `cl_pitchspeed` | `225` | Keyboard-look | Alias-based no-recoil (vertical) |
+| `cl_yawspeed` | `210` | Keyboard-look | Alias-based no-recoil (horizontal) |
+| `cl_anglespeedkey` | `0.67` | Keyboard-look | Speed multiplier amplification |
+| `m_side` | `0.8` | Mouse | Side-strafe sensitivity scaling |
+| `gl_picmip` | `0` | Visual | Wall-texture-flattening wallhack class |
+| `r_glowshellfreq` | `0` | Visual | Glow-shell ESP overlay (CS 1.6 lineage) |
+| `r_traceglow` | `0` | Visual | Glow-shell trace-debug ESP companion |
+
+### Why — keyboard-look cvars (alias-based no-recoil scripts)
+
+Standard HL1 community pattern, not theoretical:
+
+```
+alias _norec1 "+lookdown; wait; -lookdown; alias norec _norec2"
+alias _norec2 "wait; alias norec _norec1"
+bind mouse1 "+attack; norec"
+```
+
+While `mouse1` is held, the alias loop pulses `+lookdown` every other tick. Each pulse moves the view down by `cl_pitchspeed × frametime` degrees. With `cl_pitchspeed=9999` and 1000fps, a single tick pulse rotates the view ~10° downward — enough to cancel the upward `punchangle` kick of full-auto weapons (BAR, MP44, MG42). Clamped values (`225`/`210`/`0.67`) make the per-tick correction too small to keep up with sustained recoil. `m_side` is added for completeness — same family, freely settable, default 0.8.
+
+### Why — visual cvars (wallhack / ESP defenses)
+
+- **`gl_picmip`** at high values (e.g. 16) reduces wall textures to solid-color blocks. Player models render with their own texture set, producing high-contrast silhouettes against terrain. Documented CS 1.6 wallhack, applies to DoD via shared engine. Modern client builds clamp 0-3 but not all do — defense-in-depth at the server side.
+- **`r_glowshellfreq`** + **`r_traceglow`** historically used in CS 1.6 ESP scripts to render entity glow shells through walls. Default `r_glowshellfreq=2.2` and `r_traceglow=0`; we enforce both at 0 to disable the entire glow-shell rendering path that ESPs hooked.
+
+### Why these were missed in v7.13
+
+The v7.13 cleanup framed the keyboard-look trio as "engine-limited" alongside actually-clamped cvars (`cl_upspeed`, `cl_movespeedkey` — those have FCVAR_SERVER OR are clamped server-side via `sv_maxspeed`). The visual trio (`gl_picmip` / `r_glowshellfreq` / `r_traceglow`) was framed as "settings we don't police" — that was a classification mistake, not a defensible decision. Mouse-aim cvars (`m_pitch`, `sensitivity`, `m_yaw`) were properly enforced; the keyboard-look companions and visual exploit cvars slipped through. Surfaced 2026-04-27 in CrankinHawg-suspicion analysis; live as anti-cheat regression for ~2.5 months.
+
+### Other v7.13-removed cvars audited and confirmed safe to leave out (18)
+
+`gl_affinemodels`, `gl_alphamin`, `gl_cull`, `gl_dither`, `gl_keeptjunctions`, `gl_lightholes`, `gl_palette_tex`, `gl_round_down` (8 visual nothings), `cl_fixtimerate`, `cl_gaitestimation` (self-harm only), `cl_upspeed`, `cl_movespeedkey` (server-side `sv_maxspeed`/consistency clamps cover these), `ambient_fade`, `ambient_level` (atmospheric audio), `lookspring`, `lookstrafe` (legacy mouselook settings), `r_bmodelinterp` (door interpolation), `r_wadtextures` (texture loading flag). Either no exploit surface, fully covered by server-side clamps, or already engine-clamped.
+
+### Implementation
+
+- Inserted into `gs_cvars[]` at indices 25-31, between `s_show` and `texgamma` (preserves `HUD_TAKESSHOTS_INDEX=16` and `M_PITCH_INDEX=17`).
+- `MIN_MAX_CVAR_START` shifted `26 → 33`. Range cvars (`lightgamma`, `cl_bob`, `cl_updaterate`, etc.) keep their original ordering, just renumbered.
+- `TOTAL_CVARS` `33 → 40`. `STANDARD_CVARS_COUNT` `24 → 31`.
+- Standard rotation (1.0s/cvar), so each cvar is checked every ~31s. These are static cvars — an attacker can't pulse them between shots faster than the rotation catches them.
+
+---
+
 ## [7.23] - 2026-04-25
 
 ### Added

@@ -136,7 +136,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.23"
+#define PLUGIN_VERSION "7.24"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -155,8 +155,8 @@ new const inverse_p[] = "-0.022";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 33
-#define MIN_MAX_CVAR_START 26
+#define TOTAL_CVARS 40
+#define MIN_MAX_CVAR_START 33
 #define ALT_VALUES_COUNT 7
 
 // Enforcement cvar name length
@@ -255,32 +255,48 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 }
 
 // All cvars (for initial check and reference)
-// Indices 0-25: exact value cvars, indices 26-32: range cvars (min/max)
+// Indices 0-32: exact value cvars, indices 33-39: range cvars (min/max)
+//
+// v7.24 (2026-04-28): re-added 7 cvars dropped in v7.13 (2026-02-17) under the
+// false rationale "engine-limited values." All actually register with
+// `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
+// freely settable client-side. Indices 25-28 (keyboard-look — defeats
+// alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
+// indices 29-31 (visual-class — defeats picmip wallhack and r_glowshellfreq
+// ESP-overlay exploits). MIN_MAX_CVAR_START shifted 26→33 to keep range cvars
+// (lightgamma onwards) at logically the same positions.
 new gs_cvars[TOTAL_CVARS][] = {
 "cl_bobcycle", "cl_bobup", "cl_lc", "cl_lw", "cl_mousegrab",
 "cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
 "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
 "gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
 "r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"cl_pitchspeed", "cl_yawspeed", "cl_anglespeedkey", "m_side",
+"gl_picmip", "r_glowshellfreq", "r_traceglow",
 "texgamma", "lightgamma", "cl_bob", "cl_updaterate",
 "cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
 // Standard cvars (non-priority): checked via rotation every 1.0 seconds
 // Excludes the 9 priority cvars listed above
-#define STANDARD_CVARS_COUNT 24
+#define STANDARD_CVARS_COUNT 31
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 "cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
 "gl_clear", "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors",
 "gl_overbright", "gl_playermip", "hud_takesshots", "r_drawentities", "r_drawviewmodel",
 "r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"cl_pitchspeed", "cl_yawspeed", "cl_anglespeedkey", "m_side",
+"gl_picmip", "r_glowshellfreq", "r_traceglow",
 "texgamma", "lightgamma", "cl_bob", "fps_max"
 }
 
 new gs_calvalues[TOTAL_CVARS][] = {
 "0.8", "0.5", "1", "1", "1", "89", "89", "0", "0", "0",
 "0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
-"1", "0", "0", "0", "0", "2", "1.809", "0", "100",
+"1", "0", "0", "0", "0",
+"225", "210", "0.67", "0.8",
+"0", "0", "0",
+"2", "1.809", "0", "100",
 "100", "100000", "0.009", "60"
 }
 
