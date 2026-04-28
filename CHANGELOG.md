@@ -2,6 +2,76 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.25] - 2026-04-28
+
+### Removed — cl_lc and cl_lw out of enforcement (player-asked, no exploit surface)
+
+Both cvars dropped from `gs_cvars[]` and `gs_priority_cvars[]`. Player choice now. Settings persisted from a previous server connection are honored; KTPCvarChecker no longer overwrites them.
+
+#### Why this is safe (deep audit findings)
+
+Source-traced every reference to `cl->lc` and `cl->lw` in KTPReHLDS:
+
+| File:Line | Use | Effect when flag = 0 |
+|---|---|---|
+| `sv_user.cpp:1209,1228` | `SV_GetTrueOrigin`/`MinMax` early-return | Game DLL gets CURRENT positions (no rewind) |
+| `sv_user.cpp:1284,1492` | `SV_MoveOthers`/`SV_RestoreMove` skip | Lag-comp rewind path is bypassed |
+| `sv_main.cpp:1343,1371` | `pfnUpdateClientData`/`GetWeaponData` | Client receives non-predicted weapon state |
+| `sv_main.cpp:5104` | Per-update flag transmission | Weapon flags sent every frame instead of delta'd |
+| `pr_cmds.cpp:1311` | Event playback skip | Local event prediction skipped |
+
+**Every gate keys off the SHOOTER's flags, never the target's.** This means cl_lc=0 / cl_lw=0 is a strict self-handicap:
+
+- The shooter must lead targets by their full latency (no rewind to compensate).
+- Other players hitting the cl_lc=0 player still get rewound normally — they're a normal target.
+- cl_lw=0 additionally disables client-side weapon prediction (animations + reload feel laggy at non-LAN ping).
+
+**No exploit angles found:**
+- Aimbot performance: with cl_lc=0, aimbots that track current position must lead, slightly degrading their effectiveness. Not a meaningful protection but also not an exploit angle the player gains.
+- Wallhack/ESP: independent of cl_lc/cl_lw.
+- Hit-reg manipulation: self-handicap means harder hits, never easier.
+- Server CPU exploit: no — skip-rewind is cheaper than rewind, can't be weaponized.
+- Info leak: cl_lw=0 receives more detailed weapon data, but only about YOUR OWN weapon. No other-player info exposed.
+- KTPAntiCheat detection: searched the AC repo; zero references to cl_lc / cl_lw / lagcomp / weapon-prediction. AC rules don't depend on these values.
+
+**Legitimate niche use case** (the player's likely angle): cl_lc=0 eliminates "shot through wall" / "behind cover and still died" complaints. With lag comp off, you only hit what you currently see, not what the server rewound. CPL/CAL-era CS 1.6 LAN players sometimes preferred this for "cleaner feel."
+
+Documented trade-off in `KTP Cvar List.md`.
+
+### Changed — cl_cmdrate upper bound 500 → 1000
+
+`gs_altvalues[3]` raised from `"500"` to `"1000"`. Range becomes 100-1000.
+
+#### Why
+
+Player wants to test a new hit-reg formula at higher input resolution. Engine and bandwidth math support it:
+
+- **Bandwidth at cl_cmdrate=1000:** ~60 KB/s (60 byte packets × 1000 pps). `rate=100000` = 100 KB/s, comfortable headroom.
+- **CMD_MAXBACKUP=64** (sv_user.h:36) — hard cap on commands per packet, server drops client if exceeded. Doesn't directly limit cmdrate.
+- **Server CPU:** KTP-ReHLDS already moved lag-comp from per-cmd to per-packet (~90% overhead reduction at high cmd rates per CHANGELOG line 183). 13 active players × 1000 cmd/s × ~10µs pmove ≈ 13% CPU on cmd processing. Fits comfortably on isolated SCHED_FIFO core.
+- **Useful range:** `cl_cmdrate ≤ client_fps`. Setting cl_cmdrate above your fps wastes bandwidth (extra packets carry only backups). Most useful at cmdrate = client fps.
+
+#### Trade-offs documented
+
+- ✅ Tighter input timestamping (1ms windows at cmdrate=1000 vs 10ms at cmdrate=100)
+- ✅ Faster reaction-time resolution
+- ❌ More UDP packets visible on the wire — slightly more susceptible to packet loss in poor-network scenarios
+- ❌ Higher server CPU per client (linear)
+
+### Implementation
+
+- `gs_cvars[]` indices 2,3 (cl_lc, cl_lw) removed. Subsequent indices shift down by 2.
+- `gs_calvalues[]` matching entries removed.
+- `gs_priority_cvars[]` cl_lc, cl_lw entries removed; `PRIORITY_CVARS_COUNT` 9 → 7.
+- `HUD_TAKESSHOTS_INDEX` 16 → 14, `M_PITCH_INDEX` 17 → 15 (downstream constants shift).
+- `MIN_MAX_CVAR_START` 33 → 31. Range cvars at logically the same positions, just renumbered.
+- `TOTAL_CVARS` 40 → 38. `STANDARD_CVARS_COUNT` unchanged (cl_lc/cl_lw weren't in standard rotation).
+- `gs_altvalues[3]` (cl_cmdrate upper bound) "500" → "1000".
+
+Documentation: `KTP_Documentation/KTP Cvar List.md` updated — `cl_lc` and `cl_lw` rows removed from Network & Prediction; `cl_cmdrate` range updated to 100-1000; footer date bumped.
+
+---
+
 ## [7.24] - 2026-04-28
 
 ### Added — Reverted v7.13 over-removal: 7 cvars re-added

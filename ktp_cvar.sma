@@ -136,7 +136,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.24"
+#define PLUGIN_VERSION "7.25"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -155,23 +155,24 @@ new const inverse_p[] = "-0.022";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 40
-#define MIN_MAX_CVAR_START 33
+#define TOTAL_CVARS 38
+#define MIN_MAX_CVAR_START 31
 #define ALT_VALUES_COUNT 7
 
 // Enforcement cvar name length
 #define ENFORCE_CVAR_LEN 32
 
 // Cvar indices in gs_cvars[] array — must match array positions
-#define HUD_TAKESSHOTS_INDEX 16
-#define M_PITCH_INDEX 17
+// v7.25: shifted down by 2 after cl_lc/cl_lw removal (was 16, 17)
+#define HUD_TAKESSHOTS_INDEX 14
+#define M_PITCH_INDEX 15
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
-#define PRIORITY_CHECK_INTERVAL 0.5   // Priority cvar rotation: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
-#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: 1 cvar every 1.0s (full cycle: 25s for 25 cvars)
+#define PRIORITY_CHECK_INTERVAL 0.5   // Priority cvar rotation: 1 cvar every 0.5s (full cycle: 3.5s for 7 cvars)
+#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: 1 cvar every 1.0s (full cycle: 31s for 31 cvars)
 
-// Priority cvar count
-#define PRIORITY_CVARS_COUNT 9
+// Priority cvar count (v7.25: 9 → 7 after cl_lc/cl_lw removed from enforcement)
+#define PRIORITY_CVARS_COUNT 7
 
 // Discord notification grouping
 #define DISCORD_DELAY 5.0          // Delay to batch violations before sending Discord
@@ -249,24 +250,33 @@ new bool:g_discordPending
 // ============================================================================
 
 // Priority cvars: checked every 0.5 seconds (movement/network/performance exploits)
+// v7.25: cl_lc and cl_lw removed from enforcement after deep audit confirmed
+// no exploit surface (either flag = 0 is a strict self-handicap on the shooter).
+// See KTPReHLDS sv_user.cpp:1284,1492 — gates lag-comp rewind on shooter's flags.
+// AC detection rules don't depend on these. Player-asked permitting; documented
+// trade-off in KTP Cvar List.
 new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 "m_pitch", "cl_pitchdown", "cl_pitchup", "cl_updaterate", "cl_cmdrate",
-"rate", "ex_interp", "cl_lc", "cl_lw"
+"rate", "ex_interp"
 }
 
 // All cvars (for initial check and reference)
-// Indices 0-32: exact value cvars, indices 33-39: range cvars (min/max)
+// Indices 0-30: exact value cvars, indices 31-37: range cvars (min/max)
 //
 // v7.24 (2026-04-28): re-added 7 cvars dropped in v7.13 (2026-02-17) under the
 // false rationale "engine-limited values." All actually register with
 // `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
-// freely settable client-side. Indices 25-28 (keyboard-look — defeats
+// freely settable client-side. Indices 23-26 (keyboard-look — defeats
 // alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
-// indices 29-31 (visual-class — defeats picmip wallhack and r_glowshellfreq
-// ESP-overlay exploits). MIN_MAX_CVAR_START shifted 26→33 to keep range cvars
-// (lightgamma onwards) at logically the same positions.
+// indices 27-29 (visual-class — defeats picmip wallhack and r_glowshellfreq
+// ESP-overlay exploits).
+//
+// v7.25 (2026-04-28): removed cl_lc and cl_lw from enforcement after
+// engine-source audit confirmed no exploit surface. HUD_TAKESSHOTS_INDEX and
+// M_PITCH_INDEX shifted -2 (was 16,17 → now 14,15). MIN_MAX_CVAR_START shifted
+// 33→31 to keep range cvars at logically the same positions.
 new gs_cvars[TOTAL_CVARS][] = {
-"cl_bobcycle", "cl_bobup", "cl_lc", "cl_lw", "cl_mousegrab",
+"cl_bobcycle", "cl_bobup", "cl_mousegrab",
 "cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
 "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
 "gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
@@ -278,7 +288,7 @@ new gs_cvars[TOTAL_CVARS][] = {
 }
 
 // Standard cvars (non-priority): checked via rotation every 1.0 seconds
-// Excludes the 9 priority cvars listed above
+// Excludes the 7 priority cvars listed above
 #define STANDARD_CVARS_COUNT 31
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 "cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
@@ -291,7 +301,7 @@ new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 }
 
 new gs_calvalues[TOTAL_CVARS][] = {
-"0.8", "0.5", "1", "1", "1", "89", "89", "0", "0", "0",
+"0.8", "0.5", "1", "89", "89", "0", "0", "0",
 "0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
 "1", "0", "0", "0", "0",
 "225", "210", "0.67", "0.8",
@@ -300,8 +310,17 @@ new gs_calvalues[TOTAL_CVARS][] = {
 "100", "100000", "0.009", "60"
 }
 
+// Range cvar upper bounds (paired with gs_calvalues lower bounds for indices >= MIN_MAX_CVAR_START).
+// Index → range cvar:
+//   0: lightgamma  (cal=1.809 → alt=3)
+//   1: cl_bob      (cal=0     → alt=0.011)
+//   2: cl_updaterate (cal=100 → alt=120)
+//   3: cl_cmdrate  (cal=100   → alt=1000)   v7.25: was 500, raised to enable input-resolution testing
+//   4: rate        (cal=alt=100000, locked single value)
+//   5: ex_interp   (cal=0.009 → alt=0.05)
+//   6: fps_max     (cal=60    → alt=750)
 new gs_altvalues[ALT_VALUES_COUNT][] = {
-"3", "0.011", "120", "500", "100000", "0.05", "750"
+"3", "0.011", "120", "1000", "100000", "0.05", "750"
 }
 
 // Pre-converted float arrays (performance optimization)
