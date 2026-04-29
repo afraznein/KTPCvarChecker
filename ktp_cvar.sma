@@ -136,7 +136,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.25"
+#define PLUGIN_VERSION "7.26"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -268,13 +268,25 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 // `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
 // freely settable client-side. Indices 23-26 (keyboard-look — defeats
 // alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
-// indices 27-29 (visual-class — defeats picmip wallhack and r_glowshellfreq
-// ESP-overlay exploits).
+// indices 27-29 (visual-class — gl_picmip enforced at 0 defeats picmip
+// wallhack; r_glowshellfreq enforced at 2.2 = DoD default for integrity
+// check only; r_traceglow enforced at 0 = its actual default).
 //
 // v7.25 (2026-04-28): removed cl_lc and cl_lw from enforcement after
 // engine-source audit confirmed no exploit surface. HUD_TAKESSHOTS_INDEX and
 // M_PITCH_INDEX shifted -2 (was 16,17 → now 14,15). MIN_MAX_CVAR_START shifted
 // 33→31 to keep range cvars at logically the same positions.
+//
+// v7.26 (2026-04-29): r_glowshellfreq enforced value 0 → 2.2 (the actual DoD
+// engine default). The original v7.24 rationale claimed enforcing 0 would
+// "disable the entire glow-shell rendering path that ESPs hooked," but that
+// reasoning broke twice: (1) DoD genuinely uses glow shells on flag carriers
+// (gameplay element), so forcing 0 changes what players see vs. what the game
+// designers shipped, and (2) clients with the natural default 2.2 were being
+// kicked by the cvar checker for being "non-compliant" — friction without
+// security benefit (an ESP attacker would just set 0 too). Enforcing the
+// actual default keeps the integrity check (catches autoexec overrides) while
+// removing the false-positive kick path.
 new gs_cvars[TOTAL_CVARS][] = {
 "cl_bobcycle", "cl_bobup", "cl_mousegrab",
 "cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
@@ -305,7 +317,7 @@ new gs_calvalues[TOTAL_CVARS][] = {
 "0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
 "1", "0", "0", "0", "0",
 "225", "210", "0.67", "0.8",
-"0", "0", "0",
+"0", "2.2", "0",                  // gl_picmip, r_glowshellfreq, r_traceglow — see v7.26 note above for r_glowshellfreq=2.2 rationale
 "2", "1.809", "0", "100",
 "100", "100000", "0.009", "60"
 }

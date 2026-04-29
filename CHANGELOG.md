@@ -2,6 +2,36 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.26] - 2026-04-29
+
+### Fixed
+
+#### `r_glowshellfreq` enforced value `0` → `2.2` (the actual DoD engine default)
+Players with the natural game default (`r_glowshellfreq = 2.2`) were being kicked by the cvar checker as "non-compliant" — a false-positive class. The original v7.24 (2026-04-28) rationale claimed enforcing `0` would *"disable the entire glow-shell rendering path that ESPs hooked"*, but that reasoning broke twice:
+
+1. **DoD genuinely uses glow shells on flag carriers** — it's a gameplay element shipped by the game designers. Forcing clients to `0` changed what players see vs. what the game intended (flag-carrier shimmer disappears).
+2. **No actual security benefit.** An ESP-script attacker would simply set `r_glowshellfreq = 0` along with everyone else — the previous "0" enforcement neither blocked attackers nor matched legitimate players.
+
+##### What v7.26 actually does
+- `gs_calvalues[28]` flipped from `"0"` to `"2.2"` (matches engine default).
+- Inline comment block updated: gl_picmip stays at 0 (still defeats picmip wallhack — real security), r_glowshellfreq moves to 2.2 (integrity check only, catches autoexec overrides), r_traceglow stays at 0 (which IS its engine default — was never the issue).
+
+##### Behavior change for players
+- **Players at `2.2` (the natural default)**: previously kicked, now compliant. ✅ Improvement.
+- **Players at `0` (had set it manually to comply with the broken old rule)**: now kicked. They'll see the new expected value `2.2` in the kick reason and need to remove `r_glowshellfreq 0` from their autoexec / config. One-time friction; resolves itself.
+- **Players who never touched it**: no action needed. Default is already 2.2.
+
+##### Source-of-truth references
+- KTP CHANGELOG v7.24 itself acknowledged *"Default `r_glowshellfreq=2.2` and `r_traceglow=0`"* — the default value was correctly identified at the time, but enforcement deviated from it for a since-rejected security rationale.
+- `KTP_Documentation/KTP Cvar List.md` updated in lockstep — was previously documenting the enforced `0`, now documents `2.2` matching the engine default.
+- `docs/CVAR_RECOMMENDATIONS_1000TICK.md` already correctly stated `r_glowshellfreq = 2.2` as the natural default in its 1000-tick research notes.
+
+##### What this does NOT change
+- Other anti-cheat measures unchanged. KTPCvarChecker still enforces 30 exact cvars + 7 range cvars covering keyboard-look defeat (cl_pitchspeed et al.), wallhack defeat (gl_picmip), and the rest of the curated set.
+- The enforcement loop, priority-cvar scheduling, and Discord alert path are untouched.
+
+---
+
 ## [7.25] - 2026-04-28
 
 ### Removed — cl_lc and cl_lw out of enforcement (player-asked, no exploit surface)
