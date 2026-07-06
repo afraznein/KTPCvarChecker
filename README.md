@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.26** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.27** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
 Pure enforcement anti-cheat that monitors 38 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
@@ -10,8 +10,8 @@ Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
 ```
 KTP Cvar Checker: queries cvars periodically
-     |  Priority (9 cvars): every 2 seconds
-     |  Standard (25 cvars): rotated every 10 seconds (5 per check)
+     |  Priority (15 cvars: netcode + visual-cheat): 1 cvar every 0.3s
+     |  Standard (23 cvars): 1 cvar every 1.0s
      v
 Game Client: responds with current cvar value
      v
@@ -26,15 +26,15 @@ KTP Cvar Checker: validates, enforces, logs, Discord alert
 
 | Type | Count | Interval | Worst-Case Detection |
 |------|-------|----------|---------------------|
-| Priority cvars | 9 | Every 2s | < 2 seconds |
-| Standard cvars | 25 | 5 per 10s | ~50 seconds |
-| Initial check | All 34 | Parallel batches of 8 | ~2 seconds |
+| Priority cvars | 15 | 1 per 0.3s | ~4.5 seconds |
+| Standard cvars | 23 | 1 per 1.0s | ~23 seconds |
+| Initial check | All 38 | 1 per 0.3s, starts 1.0s after connect, priority-first | priority ≤ ~5.5s, full ~12.4s |
 
-Performance: ~5 queries/sec per player (~160 q/s for 32 players, ~0.4% CPU, ~8 KB/s network).
+Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback per client frame).
 
 ## Features
 
-- **Priority-based monitoring** — Critical cvars (movement, network) checked every 2 seconds
+- **Priority-based monitoring** — Netcode + visual-cheat cvars (fullbright/picmip class) cycle every ~4.5 seconds
 - **Automatic correction** — Forces correct values immediately on violation
 - **Discord notifications** — Grouped violations per player with 5-second batching window
 - **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
@@ -42,13 +42,13 @@ Performance: ~5 queries/sec per player (~160 q/s for 32 players, ~0.4% CPU, ~8 K
 - **Manual check** — `/cvar` command triggers full parallel query
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 
-## Monitored Cvars (34 total)
+## Monitored Cvars (38 total)
 
-**Priority (9):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, `cl_lc`, `cl_lw`
+**Priority (15):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, plus the visual-cheat set: `r_fullbright`, `r_lightmap`, `r_luminance`, `gl_monolights`, `gl_nocolors`, `gl_overbright`, `gl_picmip`, `r_drawentities`
 
-**Standard (25):** Graphics, audio, movement, and gameplay cvars — see source for full list.
+**Standard (23):** Remaining graphics, audio, movement, and gameplay cvars — see source for full list.
 
-**Range cvars (8):** `lightgamma` (1.81-3.0), `cl_smoothtime` (0-0.1), `cl_bob` (0-0.011), `cl_updaterate` (100-200), `cl_cmdrate` (100-500), `rate` (100k-1M), `ex_interp` (0-0.03), `fps_max` (60-750).
+**Range cvars (7):** `lightgamma` (1.809-3), `cl_bob` (0-0.011), `cl_updaterate` (100-120), `cl_cmdrate` (100-1000), `rate` (locked 100000), `ex_interp` (0.009-0.05), `fps_max` (60-750).
 
 ## Requirements
 

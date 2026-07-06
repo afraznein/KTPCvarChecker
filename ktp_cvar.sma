@@ -2,10 +2,29 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.22
- *   Release Date:      2026-03-24
+ *   Current Version:   7.27
+ *   Release Date:      2026-07-06
  *
  *   Changelog:
+ *   7.27 2026-07-06 - Detection-latency + batching fixes (2026-07-05 review #15 + P2)
+ *                    * CHANGED: 8 visual-cheat cvars promoted to the priority tier
+ *                      (r_fullbright, r_lightmap, r_luminance, gl_monolights, gl_nocolors,
+ *                       gl_overbright, gl_picmip, r_drawentities) — the 31s standard cycle
+ *                      left room for scripted toggle-peek-revert
+ *                    * CHANGED: priority interval 0.5s → 0.3s (netcode cycle ~4.5s, visual 31s → 4.5s)
+ *                    * FIXED: ~7.5s zero-enforcement window per (re)connect — initial sweep
+ *                      starts at 1.0s and queries priority cvars first (g_queryOrder)
+ *                    * FIXED: /cvar re-entrancy — spam stacked concurrent query chains on one counter
+ *                    * FIXED: Discord batch keyed on SteamID, not slot (slot reuse inside the
+ *                      5s window misattributed violations; FileChecker 2.6 pattern)
+ *   7.26 2026-04-29 - r_glowshellfreq enforced 0 → 2.2 (actual DoD default; kept as integrity
+ *                      check, removed false-positive friction — see array comment)
+ *   7.25 2026-04-28 - Removed cl_lc/cl_lw from enforcement (engine-source audit: no exploit
+ *                      surface); cl_cmdrate cap raised to 1000 for input-resolution testing
+ *   7.24 2026-04-28 - Re-added 7 cvars dropped in v7.13 (keyboard-look + visual-exploit
+ *                      defenses: cl_pitchspeed/yawspeed/anglespeedkey/m_side + gl_picmip/
+ *                      r_glowshellfreq/r_traceglow)
+ *   7.23 2026-04-25 - Adopted ktp_version_reporter shared include; standardized version constants
  *   7.22 2026-03-24 - Enforcement range adjustments
  *                    * CHANGED: rate locked to exact 100000 (was range 100000-1000000)
  *                    * CHANGED: cl_updaterate max lowered from 200 to 120 (matches sv_maxupdaterate)
@@ -136,7 +155,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.26"
+#define PLUGIN_VERSION "7.27"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -168,11 +187,15 @@ new const Float: FLOAT_PRECISION = 0.00005;
 #define M_PITCH_INDEX 15
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
-#define PRIORITY_CHECK_INTERVAL 0.5   // Priority cvar rotation: 1 cvar every 0.5s (full cycle: 3.5s for 7 cvars)
-#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: 1 cvar every 1.0s (full cycle: 31s for 31 cvars)
+// v7.27: priority interval 0.5 → 0.3s to absorb the 8 promoted visual cvars —
+// netcode cvars keep a ~4.5s full cycle (was 3.5s) while the visual-cheat set
+// drops from a 31s cycle to 4.5s (a scripted toggle-peek fit comfortably in 31s).
+#define PRIORITY_CHECK_INTERVAL 0.3   // Priority cvar rotation: full cycle = PRIORITY_CVARS_COUNT * this
+#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: full cycle = STANDARD_CVARS_COUNT * this
+#define INITIAL_SWEEP_INTERVAL  0.3   // Initial-sweep query spacing (README/CHANGELOG timing math keys off this)
 
-// Priority cvar count (v7.25: 9 → 7 after cl_lc/cl_lw removed from enforcement)
-#define PRIORITY_CVARS_COUNT 7
+// Priority cvar count (v7.27: 7 → 15 with the visual-cheat set promoted)
+#define PRIORITY_CVARS_COUNT 15
 
 // Discord notification grouping
 #define DISCORD_DELAY 5.0          // Delay to batch violations before sending Discord
@@ -216,7 +239,7 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 // Uses per-cvar bitmask to queue multiple violations per player per frame
 #define TASK_DEFER_ENFORCE 3000
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
-new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-1: cvar indices 32-33
+new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-5: cvar indices 32-37
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
 new Float:g_deferCalValue[MAX_PLAYERS + 1][TOTAL_CVARS]  // target float value per cvar
 
@@ -249,15 +272,21 @@ new bool:g_discordPending
 // CVAR CHECKING ARRAYS
 // ============================================================================
 
-// Priority cvars: checked every 0.5 seconds (movement/network/performance exploits)
+// Priority cvars: checked every PRIORITY_CHECK_INTERVAL (movement/network/visual exploits)
 // v7.25: cl_lc and cl_lw removed from enforcement after deep audit confirmed
 // no exploit surface (either flag = 0 is a strict self-handicap on the shooter).
 // See KTPReHLDS sv_user.cpp:1284,1492 — gates lag-comp rewind on shooter's flags.
 // AC detection rules don't depend on these. Player-asked permitting; documented
 // trade-off in KTP Cvar List.
+// v7.27: visual-cheat cvars promoted from the standard tier (review 2026-07-05
+// #15) — at the 31s standard cycle a scripted toggle-peek-revert (fullbright/
+// picmip peek for a few seconds) fit between checks. Render/visibility toggles
+// now rotate with the netcode set.
 new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 "m_pitch", "cl_pitchdown", "cl_pitchup", "cl_updaterate", "cl_cmdrate",
-"rate", "ex_interp"
+"rate", "ex_interp",
+"r_fullbright", "r_lightmap", "r_luminance", "gl_monolights", "gl_nocolors",
+"gl_overbright", "gl_picmip", "r_drawentities"
 }
 
 // All cvars (for initial check and reference)
@@ -300,15 +329,15 @@ new gs_cvars[TOTAL_CVARS][] = {
 }
 
 // Standard cvars (non-priority): checked via rotation every 1.0 seconds
-// Excludes the 7 priority cvars listed above
-#define STANDARD_CVARS_COUNT 31
+// Excludes the 15 priority cvars listed above (v7.27: 8 visual cvars moved up)
+#define STANDARD_CVARS_COUNT 23
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 "cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
-"gl_clear", "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors",
-"gl_overbright", "gl_playermip", "hud_takesshots", "r_drawentities", "r_drawviewmodel",
-"r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"gl_clear", "gl_d3dflip", "gl_nobind",
+"gl_playermip", "hud_takesshots", "r_drawviewmodel",
+"r_dynamic", "s_show",
 "cl_pitchspeed", "cl_yawspeed", "cl_anglespeedkey", "m_side",
-"gl_picmip", "r_glowshellfreq", "r_traceglow",
+"r_glowshellfreq", "r_traceglow",
 "texgamma", "lightgamma", "cl_bob", "fps_max"
 }
 
@@ -338,6 +367,15 @@ new gs_altvalues[ALT_VALUES_COUNT][] = {
 // Pre-converted float arrays (performance optimization)
 new Float:gf_calvalues[TOTAL_CVARS]
 new Float:gf_altvalues[ALT_VALUES_COUNT]
+
+// v7.27: initial-sweep query order — priority cvars first, then the rest.
+// The old sweep walked gs_cvars[] in declaration order, so the cvars that
+// matter most could sit at the tail of an ~11s sweep.
+new g_queryOrder[TOTAL_CVARS]
+
+// v7.27: /cvar re-entrancy guard — spamming the command stacked concurrent
+// query chains sharing one gi_cvarnumID counter.
+new bool:gb_initialCheckRunning[MAX_PLAYERS + 1]
 
 // ============================================================================
 // PLUGIN INITIALIZATION
@@ -391,6 +429,22 @@ public fn_init_float_arrays() {
 	for (new i = 0; i < ALT_VALUES_COUNT; i++) {
 		gf_altvalues[i] = floatstr(gs_altvalues[i])
 	}
+
+	// Build the initial-sweep order: priority cvars first, remainder after
+	new bool:placed[TOTAL_CVARS]
+	new orderPos = 0
+	for (new p = 0; p < PRIORITY_CVARS_COUNT; p++) {
+		new idx
+		if (TrieGetCell(g_cvarIndexTrie, gs_priority_cvars[p], idx) && !placed[idx]) {
+			g_queryOrder[orderPos++] = idx
+			placed[idx] = true
+		}
+	}
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		if (!placed[i])
+			g_queryOrder[orderPos++] = i
+	}
+
 	log_amx("[%s] Pre-converted %d cvar values to floats", PLUGIN_NAME, TOTAL_CVARS + ALT_VALUES_COUNT)
 }
 
@@ -469,11 +523,17 @@ public client_putinserver(id) {
 
 	gb_FirstCheckComplete[id] = false
 	gb_StopChecking[id] = false
+	gb_initialCheckRunning[id] = false
 	gi_priority_cvar_index[id] = 0
 	gi_standard_cvar_index[id] = 0
 
 	set_task(5.0, "fn_msginitial", id)
-	set_task(7.5, "fn_loopquery", id)
+	// v7.27: initial sweep starts at 1.0s (was 7.5s — a ~7.5s zero-enforcement
+	// window per connect, repeatable by reconnecting). The sweep now queries
+	// priority cvars first (g_queryOrder), so the cvars that matter are
+	// checked within the first few seconds. Queries to a still-loading client
+	// just queue in the reliable channel and answer once in-game.
+	set_task(1.0, "fn_loopquery", id)
 
 	// Start periodic monitoring after initial check completes
 	set_task(10.0, "fn_start_monitoring", id)
@@ -488,6 +548,7 @@ public client_disconnected(id) {
 	g_deferPending[id] = 0
 	g_deferPendingHi[id] = 0
 	gb_FirstCheckComplete[id] = false
+	gb_initialCheckRunning[id] = false
 	gs_enforcing_cvar[id][0] = 0
 
 	// Flush any pending Discord violations for this player
@@ -514,6 +575,13 @@ public cmd_manual_check(id) {
 	if (!is_user_connected(id))
 		return PLUGIN_HANDLED
 
+	// Re-entrancy guard: a second /cvar while a sweep runs would stack a
+	// concurrent query chain on the same gi_cvarnumID counter.
+	if (gb_initialCheckRunning[id]) {
+		client_print(id, print_console, "[%s] Cvar check already in progress...", PLUGIN_NAME)
+		return PLUGIN_HANDLED
+	}
+
 	client_print(id, print_console, "[%s] Starting manual cvar check...", PLUGIN_NAME)
 	fn_loopquery(id)
 	return PLUGIN_HANDLED
@@ -525,6 +593,8 @@ public cmd_manual_check(id) {
 
 public fn_loopquery(id) {
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || is_user_bot(id) || is_user_hltv(id)) return
+	if (gb_initialCheckRunning[id]) return
+	gb_initialCheckRunning[id] = true
 	gi_cvarnumID[id] = 0
 	fn_query_parallel(id)
 }
@@ -536,12 +606,13 @@ public fn_query_parallel(id) {
 		return
 	}
 
-	// Send ONE query per tick (engine only processes ~1 callback per frame)
-	query_client_cvar(id, gs_cvars[gi_cvarnumID[id]], "fn_querycvar")
+	// Send ONE query per tick (engine only processes ~1 callback per frame).
+	// g_queryOrder puts the priority cvars at the front of the sweep.
+	query_client_cvar(id, gs_cvars[g_queryOrder[gi_cvarnumID[id]]], "fn_querycvar")
 	gi_cvarnumID[id]++
 
 	if (gi_cvarnumID[id] < TOTAL_CVARS)
-		set_task(0.3, "fn_query_parallel", id)
+		set_task(INITIAL_SWEEP_INTERVAL, "fn_query_parallel", id)
 	else
 		fn_firstcomplete(id)
 }
@@ -568,6 +639,7 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
 
 public fn_firstcomplete(id) {
 	if (id < 1 || id > MAX_PLAYERS) return
+	gb_initialCheckRunning[id] = false
 	if (!gb_FirstCheckComplete[id]) {
 		gb_FirstCheckComplete[id] = true
 	}
@@ -578,9 +650,9 @@ public fn_firstcomplete(id) {
 // ============================================================================
 
 /**
- * Start periodic monitoring after initial check completes
- * Priority cvars: 1 cvar every 0.5s (full cycle: 4.5s for 9 cvars)
- * Standard cvars: 1 cvar every 1.0s (full cycle: 25s for 25 cvars)
+ * Start periodic monitoring after initial check completes.
+ * One cvar per tick per rotation; full cycle = list count * interval
+ * (see PRIORITY_CHECK_INTERVAL / STANDARD_CHECK_INTERVAL).
  */
 public fn_start_monitoring(id) {
 	if (id < 1 || id > MAX_PLAYERS) return
@@ -592,17 +664,17 @@ public fn_start_monitoring(id) {
 		gb_FirstCheckComplete[id] = true
 	}
 
-	// Start priority cvar checks (repeating every 0.5 seconds, one cvar per tick)
+	// Start priority cvar checks (one cvar per PRIORITY_CHECK_INTERVAL)
 	set_task(PRIORITY_CHECK_INTERVAL, "fn_check_priority_cvars", id + 1000, "", 0, "b")
 
-	// Start standard cvar rotation (repeating every 1.0 seconds, one cvar per tick)
+	// Start standard cvar rotation (one cvar per STANDARD_CHECK_INTERVAL)
 	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id + 2000, "", 0, "b")
 
 	// Removed: log_amx per-player monitoring start — 24 disk writes per match connect wave
 }
 
 /**
- * Check one priority cvar per call (called every 0.5 seconds)
+ * Check one priority cvar per call (every PRIORITY_CHECK_INTERVAL)
  * These are the most critical anti-cheat cvars
  */
 public fn_check_priority_cvars(taskid) {
@@ -620,7 +692,7 @@ public fn_check_priority_cvars(taskid) {
 }
 
 /**
- * Check one standard cvar per call (called every 1.0 seconds)
+ * Check one standard cvar per call (every STANDARD_CHECK_INTERVAL)
  * Cycles through all standard cvars via rotation
  */
 public fn_check_standard_cvars(taskid) {
@@ -857,8 +929,11 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
  * Tracks repeat violations with count
  */
 stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:corrected_value) {
-	// Check if this is a new player or same player
-	if (g_discordPlayerId != id) {
+	// New-player detection is keyed on SteamID, not just slot (v7.27, the
+	// FileChecker 2.6 pattern): a slot reused inside the 5s batch window
+	// would otherwise append the new occupant's violations to the previous
+	// player's buffer under the previous player's identity.
+	if (g_discordPlayerId != id || !equal(g_discordPlayerAuthid, gs_logauthid)) {
 		// Send any pending violations for previous player immediately
 		if (g_discordPending) {
 			remove_task(g_discordPlayerId + TASK_DISCORD_SEND)

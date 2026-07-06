@@ -2,6 +2,29 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.27] - 2026-07-06
+
+Detection-latency + batching fixes from the 2026-07-05 full-stack review (P1 #15 + P2 items).
+
+### Changed
+
+#### Visual-cheat cvars promoted to the priority tier (P1 #15)
+`r_fullbright`, `r_lightmap`, `r_luminance`, `gl_monolights`, `gl_nocolors`, `gl_overbright`, `gl_picmip`, and `r_drawentities` moved from the standard rotation (one cvar per second → full cycle ~31s) into the priority rotation. A 31-second worst-case check interval left comfortable room for a scripted toggle-peek-revert (bind fullbright/picmip on, peek, revert before the next check). The priority interval tightens from 0.5s to 0.3s so the enlarged 15-cvar priority set still cycles in ~4.5s — netcode cvars go from a 3.5s to 4.5s cycle while the visual set drops from 31s to 4.5s. Standard rotation shrinks to 23 cvars (~23s cycle). Per-player query load rises from ~3.0/s to ~4.3/s (the engine processes ~1 callback per client frame; well within budget).
+
+### Fixed
+
+#### ~7.5-second zero-enforcement window on every (re)connect
+The initial sweep didn't start until 7.5s after `client_putinserver` — repeatable by reconnecting. It now starts at 1.0s, and the sweep queries in a priority-first order (`g_queryOrder`) instead of array-declaration order, so the cvars that matter are checked within the first few seconds rather than potentially sitting at the tail of an ~11s sweep. Queries to a still-loading client queue in the reliable channel and answer once in-game.
+
+#### `/cvar` re-entrancy
+Spamming `/cvar` stacked concurrent query chains sharing the single per-player `gi_cvarnumID` counter. A per-player in-progress flag now rejects overlapping sweeps ("check already in progress"); cleared on completion and disconnect.
+
+#### Discord violation batch keyed on SteamID, not slot
+New-player detection in the 5-second Discord batch window compared only the slot id — a slot reused within the window (disconnect + fast rejoin) would append the new occupant's violations under the previous player's name/SteamID. Now also compares the stored SteamID (the KTPFileChecker 2.6 pattern; this was the last plugin carrying the slot-keyed variant).
+
+### Docs
+- In-file header changelog was stale at 7.22 — entries for 7.23–7.26 reconstructed from git history.
+
 ## [7.26] - 2026-04-29
 
 ### Fixed
