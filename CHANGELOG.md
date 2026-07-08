@@ -2,6 +2,28 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.28] - 2026-07-08
+
+Closes CV-C1 from the 2026-07-06 assessment (the one bypass worth closing) plus the two hygiene items from the same review.
+
+### Added
+
+#### Silent-client liveness tripwire (CV-C1)
+The plugin was completely blind to a client that simply never answers cvar queries: no callback fires, so there were zero logs, zero enforcement, zero tripwire — the single cleanest bypass of query-based checking. A per-player counter now tracks consecutive unanswered queries (incremented at every `query_client_cvar` site, reset by any response on either the query-callback or forward path). Crossing the threshold emits an audit log line (`event=CVAR_QUERY_SILENT sid=... name=... ip=... unanswered=... window_s=...`) and a Discord audit embed. **Alert-only** — matches the fleet's audit-first culture; no kick.
+
+Threshold design:
+- `ktp_cvar_silent_queries` (default **300**, `0` disables): at the steady cadence of 1 priority query/0.3s + 1 standard query/1.0s (~4.3 q/s), 300 consecutive unanswered queries ≈ **69 seconds of total silence** — over 15 full priority sweeps plus ~3 full standard sweeps with not one answer. Deliberately set past the 60s engine connection timeout so a genuinely dead connection is dropped by the engine before the tripwire fires; a query-blocking client keeps sending move packets, never times out, and always reaches the threshold.
+- `ktp_cvar_silent_grace` (default **60.0** seconds after `putinserver`): a still-loading client's queries queue in the reliable channel and answer late — no alert inside the grace window.
+- One alert per silent streak (latch clears on the first response or reconnect). Bots and HLTV never enter the query paths, so they can't trip it. Map changes re-fire `putinserver`, resetting counters and the grace anchor.
+
+### Fixed
+
+#### `putinserver` slot-recycle hardening
+`client_putinserver` relied on the previous occupant's `client_disconnected` having cleared the per-player enforcement state. It now explicitly clears the enforcement-attempt/filterstuff-warned arrays, the defer bitmasks, the echo-suppression slot, and the new liveness state itself, and removes any tasks still keyed to the slot.
+
+#### Steady-state responses validated twice
+Every cvar response message is dispatched twice by the engine: once to the `query_client_cvar` callback (`fn_querycvar`) and immediately after to the `client_cvar_changed` forward (KTPReHLDS `SV_ParseCvarValue2` calls `pfnCvarValue2` then `pfnClientCvarChanged` back-to-back). At steady state both paths ran the trie lookup + validation — the defer bitmask made the duplicate harmless but ~2× the work. `fn_querycvar` now marks the response handled and the forward consumes the mark and skips. The dispatch order is deterministic (same engine call stack), so the dedup can't drop a genuine event; a stale mark (forward suppressed by AMXX's ingame guard) at worst skips one opportunistic validation that the next rotation query repeats. Echo-suppression semantics (`gs_enforcing_cvar`, the accepted 7.27 residual) are unchanged.
+
 ## [7.27] - 2026-07-06
 
 Detection-latency + batching fixes from the 2026-07-05 full-stack review (P1 #15 + P2 items).

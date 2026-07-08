@@ -2,10 +2,20 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.27
- *   Release Date:      2026-07-06
+ *   Current Version:   7.28
+ *   Release Date:      2026-07-08
  *
  *   Changelog:
+ *   7.28 2026-07-08 - Silent-client tripwire + hygiene (2026-07-06 assessment CV items)
+ *                    + ADDED: per-player unanswered-query liveness counter — a client that
+ *                      never answers cvar queries now trips an audit log line
+ *                      (event=CVAR_QUERY_SILENT) + Discord alert. Alert-only, no kick.
+ *                      Cvars: ktp_cvar_silent_queries (300, 0=off), ktp_cvar_silent_grace (60.0)
+ *                    * FIXED: putinserver now clears enforcement/defer/liveness state itself
+ *                      (was relying on the previous occupant's disconnect having run)
+ *                    * FIXED: steady-state responses were validated twice (query callback +
+ *                      client_cvar_changed forward fire back-to-back for the same message) —
+ *                      forward now skips responses fn_querycvar already handled
  *   7.27 2026-07-06 - Detection-latency + batching fixes (2026-07-05 review #15 + P2)
  *                    * CHANGED: 8 visual-cheat cvars promoted to the priority tier
  *                      (r_fullbright, r_lightmap, r_luminance, gl_monolights, gl_nocolors,
@@ -155,7 +165,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.27"
+#define PLUGIN_VERSION "7.28"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -210,6 +220,10 @@ new const Float: FLOAT_PRECISION = 0.00005;
 // Discord toggle (separate from global discord.ini - allows disabling cvar spam specifically)
 new gp_cvar_discord
 new gp_cvar_match_competitive
+
+// Silent-client tripwire thresholds (see liveness section for the math)
+new gp_cvar_silent_queries
+new gp_cvar_silent_grace
 
 // KTP: Trie for O(1) cvar name → index lookup (replaces O(n) linear scan)
 new Trie:g_cvarIndexTrie
@@ -377,6 +391,24 @@ new g_queryOrder[TOTAL_CVARS]
 // query chains sharing one gi_cvarnumID counter.
 new bool:gb_initialCheckRunning[MAX_PLAYERS + 1]
 
+// v7.28: silent-client liveness tripwire. A client that answers NO cvar
+// queries produces zero callbacks — previously zero logs, zero enforcement,
+// zero tripwire (the one clean bypass). Count consecutive unanswered queries;
+// any response resets. Alert-only by fleet audit policy — never a kick.
+new gi_unansweredQueries[MAX_PLAYERS + 1]     // consecutive queries with no response
+new Float:gf_silenceStart[MAX_PLAYERS + 1]    // gametime of first query in current streak
+new Float:gf_putinTime[MAX_PLAYERS + 1]       // gametime at putinserver (grace anchor)
+new bool:gb_silentAlerted[MAX_PLAYERS + 1]    // one alert per silent streak
+
+// v7.28: response dedup. The engine dispatches the query callback
+// (fn_querycvar) then the client_cvar_changed forward back-to-back for the
+// SAME response message (KTPReHLDS SV_ParseCvarValue2) — steady state was
+// validating every response twice. fn_querycvar sets this; the forward
+// consumes it and skips. Stale-mark edge (forward suppressed by the AMXX
+// ingame guard) at worst skips one opportunistic validation — the next
+// rotation query covers it.
+new bool:gb_queryJustHandled[MAX_PLAYERS + 1]
+
 // ============================================================================
 // PLUGIN INITIALIZATION
 // ============================================================================
@@ -388,6 +420,14 @@ public plugin_init() {
 
 	// Discord toggle - enabled by default (now uses grouped notifications to reduce spam)
 	gp_cvar_discord = register_cvar("ktp_cvar_discord", "1")
+
+	// Silent-client tripwire. 300 unanswered ≈ 69s of total silence at the
+	// steady ~4.3 q/s cadence — deliberately past the 60s engine timeout so a
+	// dead connection is dropped before we alert; a query-blocking client
+	// keeps sending move packets, never times out, and always gets here.
+	// 0 disables. Grace covers slow loaders whose queued queries answer late.
+	gp_cvar_silent_queries = register_cvar("ktp_cvar_silent_queries", "300")
+	gp_cvar_silent_grace = register_cvar("ktp_cvar_silent_grace", "60.0")
 
 	// Discord webhook logging now uses shared ktp_discord.inc
 
@@ -477,6 +517,13 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id])
 		return PLUGIN_CONTINUE
 
+	// Any response = client is answering queries
+	fn_note_response(id)
+
+	// Consume the dedup mark before any early return so it can't go stale
+	new bool:handledByQuery = gb_queryJustHandled[id]
+	gb_queryJustHandled[id] = false
+
 	// Only check after initial check complete
 	if (!gb_FirstCheckComplete[id])
 		return PLUGIN_CONTINUE
@@ -486,6 +533,11 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 		gs_enforcing_cvar[id][0] = 0
 		return PLUGIN_CONTINUE
 	}
+
+	// fn_querycvar already validated this exact response — same engine message,
+	// dispatched to the query callback one call before this forward
+	if (handledByQuery)
+		return PLUGIN_CONTINUE
 
 	// Find cvar index via Trie (O(1) hash lookup instead of O(n) linear scan)
 	new ci
@@ -527,6 +579,29 @@ public client_putinserver(id) {
 	gi_priority_cvar_index[id] = 0
 	gi_standard_cvar_index[id] = 0
 
+	// v7.28: don't trust the previous occupant's disconnect to have run —
+	// clear enforcement, defer, and liveness state on slot (re)use, and kill
+	// any tasks still keyed to this slot.
+	remove_task(id)
+	remove_task(id + 1000)
+	remove_task(id + 2000)
+	remove_task(id + TASK_DEFER_ENFORCE)
+	gs_enforcing_cvar[id][0] = 0
+	g_deferPending[id] = 0
+	g_deferPendingHi[id] = 0
+	if (gb_hasViolations[id]) {
+		for (new i = 0; i < TOTAL_CVARS; i++) {
+			gi_enforce_attempts[id][i] = 0
+			gb_filterstuff_warned[id][i] = false
+		}
+		gb_hasViolations[id] = false
+	}
+	gi_unansweredQueries[id] = 0
+	gf_silenceStart[id] = 0.0
+	gf_putinTime[id] = get_gametime()
+	gb_silentAlerted[id] = false
+	gb_queryJustHandled[id] = false
+
 	set_task(5.0, "fn_msginitial", id)
 	// v7.27: initial sweep starts at 1.0s (was 7.5s — a ~7.5s zero-enforcement
 	// window per connect, repeatable by reconnecting). The sweep now queries
@@ -550,6 +625,9 @@ public client_disconnected(id) {
 	gb_FirstCheckComplete[id] = false
 	gb_initialCheckRunning[id] = false
 	gs_enforcing_cvar[id][0] = 0
+	gi_unansweredQueries[id] = 0
+	gb_silentAlerted[id] = false
+	gb_queryJustHandled[id] = false
 
 	// Flush any pending Discord violations for this player
 	if (g_discordPending && g_discordPlayerId == id) {
@@ -609,6 +687,7 @@ public fn_query_parallel(id) {
 	// Send ONE query per tick (engine only processes ~1 callback per frame).
 	// g_queryOrder puts the priority cvars at the front of the sweep.
 	query_client_cvar(id, gs_cvars[g_queryOrder[gi_cvarnumID[id]]], "fn_querycvar")
+	fn_note_query_sent(id)
 	gi_cvarnumID[id]++
 
 	if (gi_cvarnumID[id] < TOTAL_CVARS)
@@ -619,12 +698,17 @@ public fn_query_parallel(id) {
 
 public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
 	if (id < 1 || id > MAX_PLAYERS) return
+	fn_note_response(id)
 	new Float:valueFromPlayer = floatstr(s_VALUE)
 
 	// Find cvar index via Trie (O(1) hash lookup instead of O(n) linear scan)
 	new cvar_index
 	if (!TrieGetCell(g_cvarIndexTrie, s_CVARNAME, cvar_index))
 		return
+
+	// The client_cvar_changed forward fires next for this same response —
+	// mark it handled so we don't validate twice
+	gb_queryJustHandled[id] = true
 
 	if (cvar_index >= MIN_MAX_CVAR_START) {
 		fn_checkaltallowed(id, cvar_index, s_CVARNAME, valueFromPlayer,
@@ -686,6 +770,7 @@ public fn_check_priority_cvars(taskid) {
 	// Send ONE query per tick (engine only processes ~1 callback per frame)
 	new idx = gi_priority_cvar_index[id]
 	query_client_cvar(id, gs_priority_cvars[idx], "fn_querycvar")
+	fn_note_query_sent(id)
 
 	// Rotate to next priority cvar
 	gi_priority_cvar_index[id] = (idx + 1) % PRIORITY_CVARS_COUNT
@@ -704,9 +789,66 @@ public fn_check_standard_cvars(taskid) {
 	// Send ONE query per tick (engine only processes ~1 callback per frame)
 	new idx = gi_standard_cvar_index[id]
 	query_client_cvar(id, gs_standard_cvars[idx], "fn_querycvar")
+	fn_note_query_sent(id)
 
 	// Rotate to next standard cvar
 	gi_standard_cvar_index[id] = (idx + 1) % STANDARD_CVARS_COUNT
+}
+
+// ============================================================================
+// SILENT-CLIENT LIVENESS TRIPWIRE (v7.28)
+// ============================================================================
+
+/**
+ * Called at every query_client_cvar site. Tracks consecutive unanswered
+ * queries; crossing the threshold after the connect grace fires a one-shot
+ * audit alert. Alert-only — a silent client is a review flag, not a kick.
+ */
+stock fn_note_query_sent(id) {
+	if (gi_unansweredQueries[id] == 0)
+		gf_silenceStart[id] = get_gametime()
+	gi_unansweredQueries[id]++
+
+	if (gb_silentAlerted[id])
+		return
+
+	new threshold = get_pcvar_num(gp_cvar_silent_queries)
+	if (threshold <= 0 || gi_unansweredQueries[id] < threshold)
+		return
+
+	// Grace after putinserver — a still-loading client's queries queue in the
+	// reliable channel and answer late; don't flag them
+	if (get_gametime() - gf_putinTime[id] < get_pcvar_float(gp_cvar_silent_grace))
+		return
+
+	fn_alert_query_silence(id)
+}
+
+// Any response (query callback or forward) proves the client answers queries
+stock fn_note_response(id) {
+	gi_unansweredQueries[id] = 0
+	gb_silentAlerted[id] = false
+}
+
+stock fn_alert_query_silence(id) {
+	gb_silentAlerted[id] = true
+
+	get_user_name(id, gs_logname, charsmax(gs_logname))
+	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
+
+	new Float:window = get_gametime() - gf_silenceStart[id]
+
+	log_amx("[%s] event=CVAR_QUERY_SILENT sid=%s name=%s ip=%s unanswered=%d window_s=%.1f",
+		PLUGIN_NAME, gs_logauthid, gs_logname, gs_logip, gi_unansweredQueries[id], window)
+
+	if (get_pcvar_num(gp_cvar_discord) && ktp_discord_is_enabled()) {
+		new description[512]
+		formatex(description, charsmax(description),
+			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n%d consecutive cvar queries unanswered over %.0f seconds.^nClient is answering no cvar queries at all — enforcement is blind to it. Tripwire only, no action taken.",
+			gs_logname, gs_logauthid, gs_logip, gi_unansweredQueries[id], window)
+		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Query Silence", description, KTP_DISCORD_COLOR_RED)
+	}
 }
 
 // ============================================================================

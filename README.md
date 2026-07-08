@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.27** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.28** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
 Pure enforcement anti-cheat that monitors 38 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
@@ -38,6 +38,7 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 - **Automatic correction** — Forces correct values immediately on violation
 - **Discord notifications** — Grouped violations per player with 5-second batching window
 - **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
+- **Silent-client tripwire** — A client answering no cvar queries at all (the total-query-blocking bypass) trips an audit log line + Discord alert after ~69s of total silence; alert-only, never a kick. Residual: a client selectively blocking only some cvar names is not covered (per-cvar staleness counters are the follow-up if that class ever appears)
 - **Dynamic hud_takesshots** — Only enforced during competitive matches (`.ktp`, `.ktpOT`)
 - **Manual check** — `/cvar` command triggers full parallel query
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
@@ -69,6 +70,8 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 | Cvar | Default | Description |
 |------|---------|-------------|
 | `ktp_cvar_discord` | `1` | Enable/disable Discord violation alerts |
+| `ktp_cvar_silent_queries` | `300` | Consecutive unanswered queries before the silent-client tripwire fires (~69s at the steady ~4.3 q/s cadence; past the 60s engine timeout so dead connections drop first). `0` disables |
+| `ktp_cvar_silent_grace` | `60.0` | Seconds after putinserver before the tripwire may fire (still-loading clients answer queued queries late) |
 
 Discord integration uses the shared `discord.ini` config. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
 
