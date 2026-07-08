@@ -2,6 +2,13 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.29] - 2026-07-08
+
+Closes the selective-tier-blocking residual documented in 7.28.
+
+### Added
+- **Per-tier silence tripwire** - the 7.28 global counter resets on ANY response, so a client answering only one rotation tier (e.g. everything except the 0.3s priority tier, where the wallhack-relevant cvars live) never tripped it while that tier's cvars went unvalidated. Each tier now keeps its own unanswered counter, reset only by a response resolved to a cvar of that tier (full-list index mapped to tier at init). Time-primary threshold (`ktp_cvar_silent_tier_secs`, default 90s, 0 disables) with a 30-query minimum floor, same 60s join grace, latched once per streak per tier, and suppressed while the global total-silence alert is latched (total silence is the stronger signal). Emits `CVAR_TIER_SILENT` + a Discord audit embed naming the blocked tier. Alert-only. Remaining residual: per-NAME selective blocking within a tier.
+
 ## [7.28] - 2026-07-08
 
 Closes CV-C1 from the 2026-07-06 assessment (the one bypass worth closing) plus the two hygiene items from the same review.

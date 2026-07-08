@@ -2,10 +2,17 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.28
+ *   Current Version:   7.29
  *   Release Date:      2026-07-08
  *
  *   Changelog:
+ *   7.29 2026-07-08 - Per-tier silence tripwire (closes the selective-tier-blocking residual)
+ *                    + ADDED: per-tier unanswered counters — a client answering only one
+ *                      rotation tier trips event=CVAR_TIER_SILENT + Discord alert after
+ *                      ~90s of that tier's silence (ktp_cvar_silent_tier_secs, 0=off;
+ *                      30-query floor; suppressed while globally silent so the
+ *                      "selective" claim is structurally true). Alert-only, no kick.
+ *                      Recovery from total silence resets both tiers (no false accusation).
  *   7.28 2026-07-08 - Silent-client tripwire + hygiene (2026-07-06 assessment CV items)
  *                    + ADDED: per-player unanswered-query liveness counter — a client that
  *                      never answers cvar queries now trips an audit log line
@@ -165,7 +172,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.28"
+#define PLUGIN_VERSION "7.29"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -409,6 +416,22 @@ new bool:gb_silentAlerted[MAX_PLAYERS + 1]    // one alert per silent streak
 // rotation query covers it.
 new bool:gb_queryJustHandled[MAX_PLAYERS + 1]
 
+// v7.29: per-tier liveness — closes the selective-blocking residual 7.28
+// documented. A client answering only one rotation tier (e.g. everything
+// EXCEPT the 0.3s visual tier, where the wallhack-relevant cvars live)
+// resets the global counter forever while the blocked tier stays
+// unvalidated. Each tier's counter resets only on a response resolved to
+// that tier; the check is time-primary (both rotations have different
+// cadences) with a minimum-query floor so it can't fire off a stall.
+#define TIER_PRIORITY 0
+#define TIER_STANDARD 1
+#define TIER_SILENT_MIN_QUERIES 30
+new gi_unansweredTier[MAX_PLAYERS + 1][2]
+new Float:gf_tierSilenceStart[MAX_PLAYERS + 1][2]
+new bool:gb_tierAlerted[MAX_PLAYERS + 1][2]
+new bool:gb_isPriorityCvar[TOTAL_CVARS]
+new gp_cvar_silent_tier_secs
+
 // ============================================================================
 // PLUGIN INITIALIZATION
 // ============================================================================
@@ -428,6 +451,23 @@ public plugin_init() {
 	// 0 disables. Grace covers slow loaders whose queued queries answer late.
 	gp_cvar_silent_queries = register_cvar("ktp_cvar_silent_queries", "300")
 	gp_cvar_silent_grace = register_cvar("ktp_cvar_silent_grace", "60.0")
+
+	// Per-tier silence window (seconds). Time-primary because the two
+	// rotations run at different cadences (priority ~3.3 q/s, standard
+	// ~1 q/s); 90s means both tiers alert on comparable wall-clock silence.
+	// 0 disables the tier tripwire (the global one keeps working).
+	gp_cvar_silent_tier_secs = register_cvar("ktp_cvar_silent_tier_secs", "90.0")
+
+	// Map full-list indexes to tiers once — name-compare at init avoids any
+	// ordering dependency on the trie build (15x38 compares, one time).
+	for (new p = 0; p < PRIORITY_CVARS_COUNT; p++) {
+		for (new i = 0; i < TOTAL_CVARS; i++) {
+			if (equal(gs_priority_cvars[p], gs_cvars[i])) {
+				gb_isPriorityCvar[i] = true
+				break
+			}
+		}
+	}
 
 	// Discord webhook logging now uses shared ktp_discord.inc
 
@@ -542,6 +582,7 @@ public client_cvar_changed(id, const cvar[], const value[]) {
 	// Find cvar index via Trie (O(1) hash lookup instead of O(n) linear scan)
 	new ci
 	if (TrieGetCell(g_cvarIndexTrie, cvar, ci)) {
+		fn_note_tier_response(id, ci)
 		new Float:valueFromPlayer = floatstr(value)
 
 		if (ci >= MIN_MAX_CVAR_START) {
@@ -601,6 +642,11 @@ public client_putinserver(id) {
 	gf_putinTime[id] = get_gametime()
 	gb_silentAlerted[id] = false
 	gb_queryJustHandled[id] = false
+	for (new t = 0; t < 2; t++) {
+		gi_unansweredTier[id][t] = 0
+		gf_tierSilenceStart[id][t] = 0.0
+		gb_tierAlerted[id][t] = false
+	}
 
 	set_task(5.0, "fn_msginitial", id)
 	// v7.27: initial sweep starts at 1.0s (was 7.5s — a ~7.5s zero-enforcement
@@ -710,6 +756,8 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
 	// mark it handled so we don't validate twice
 	gb_queryJustHandled[id] = true
 
+	fn_note_tier_response(id, cvar_index)
+
 	if (cvar_index >= MIN_MAX_CVAR_START) {
 		fn_checkaltallowed(id, cvar_index, s_CVARNAME, valueFromPlayer,
 			gf_calvalues[cvar_index], gf_altvalues[cvar_index - MIN_MAX_CVAR_START],
@@ -771,6 +819,7 @@ public fn_check_priority_cvars(taskid) {
 	new idx = gi_priority_cvar_index[id]
 	query_client_cvar(id, gs_priority_cvars[idx], "fn_querycvar")
 	fn_note_query_sent(id)
+	fn_note_tier_query(id, TIER_PRIORITY)
 
 	// Rotate to next priority cvar
 	gi_priority_cvar_index[id] = (idx + 1) % PRIORITY_CVARS_COUNT
@@ -790,6 +839,7 @@ public fn_check_standard_cvars(taskid) {
 	new idx = gi_standard_cvar_index[id]
 	query_client_cvar(id, gs_standard_cvars[idx], "fn_querycvar")
 	fn_note_query_sent(id)
+	fn_note_tier_query(id, TIER_STANDARD)
 
 	// Rotate to next standard cvar
 	gi_standard_cvar_index[id] = (idx + 1) % STANDARD_CVARS_COUNT
@@ -826,8 +876,82 @@ stock fn_note_query_sent(id) {
 
 // Any response (query callback or forward) proves the client answers queries
 stock fn_note_response(id) {
+	// Recovery from a TOTAL-silence stretch (network stall, alt-tab, load
+	// hitch) contaminated both tier counters — they kept accumulating while
+	// tier alerts were suppressed. Reset them here or the sibling tier's
+	// stale counter fires a false "selective blocking" accusation on its
+	// next query, before that tier's own response arrives. A genuinely
+	// selective client re-accumulates the blocked tier and fires ~90s later.
+	if (gb_silentAlerted[id] || gi_unansweredQueries[id] >= TIER_SILENT_MIN_QUERIES) {
+		for (new t = 0; t < 2; t++) {
+			gi_unansweredTier[id][t] = 0
+			gf_tierSilenceStart[id][t] = 0.0
+			gb_tierAlerted[id][t] = false
+		}
+	}
 	gi_unansweredQueries[id] = 0
 	gb_silentAlerted[id] = false
+}
+
+/**
+ * v7.29: tier-scoped query note. Time-primary threshold (the tiers run at
+ * different cadences) with a minimum-query floor; suppressed while the
+ * global total-silence alert is latched (total silence is the stronger,
+ * already-fired signal — tier alerts are for the SELECTIVE case).
+ */
+stock fn_note_tier_query(id, tier) {
+	if (gi_unansweredTier[id][tier] == 0)
+		gf_tierSilenceStart[id][tier] = get_gametime()
+	gi_unansweredTier[id][tier]++
+
+	if (gb_tierAlerted[id][tier] || gb_silentAlerted[id])
+		return
+
+	// Not "selective" if the client is globally silent right now — the
+	// embed's claim that other queries ARE being answered must be true
+	// (also covers the global tripwire being disabled/raised).
+	if (gi_unansweredQueries[id] >= TIER_SILENT_MIN_QUERIES)
+		return
+
+	new Float:windowSecs = get_pcvar_float(gp_cvar_silent_tier_secs)
+	if (windowSecs <= 0.0 || gi_unansweredTier[id][tier] < TIER_SILENT_MIN_QUERIES)
+		return
+	if (get_gametime() - gf_tierSilenceStart[id][tier] < windowSecs)
+		return
+	if (get_gametime() - gf_putinTime[id] < get_pcvar_float(gp_cvar_silent_grace))
+		return
+
+	fn_alert_tier_silence(id, tier)
+}
+
+// A response resolved to a tracked cvar proves delivery for that cvar's tier
+stock fn_note_tier_response(id, cvar_index) {
+	new tier = gb_isPriorityCvar[cvar_index] ? TIER_PRIORITY : TIER_STANDARD
+	gi_unansweredTier[id][tier] = 0
+	gb_tierAlerted[id][tier] = false
+}
+
+stock fn_alert_tier_silence(id, tier) {
+	gb_tierAlerted[id][tier] = true
+
+	get_user_name(id, gs_logname, charsmax(gs_logname))
+	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
+
+	new tierName[12]
+	copy(tierName, charsmax(tierName), tier == TIER_PRIORITY ? "priority" : "standard")
+	new Float:window = get_gametime() - gf_tierSilenceStart[id][tier]
+
+	log_amx("[%s] event=CVAR_TIER_SILENT tier=%s sid=%s name=%s ip=%s unanswered=%d window_s=%.1f",
+		PLUGIN_NAME, tierName, gs_logauthid, gs_logname, gs_logip, gi_unansweredTier[id][tier], window)
+
+	if (get_pcvar_num(gp_cvar_discord) && ktp_discord_is_enabled()) {
+		new description[512]
+		formatex(description, charsmax(description),
+			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n%d consecutive %s-tier cvar queries unanswered over %.0f seconds while OTHER queries are being answered — selective-blocking signature (that tier's cvars are unvalidated for this client). Tripwire only, no action taken.",
+			gs_logname, gs_logauthid, gs_logip, gi_unansweredTier[id][tier], tierName, window)
+		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Tier Silence", description, KTP_DISCORD_COLOR_RED)
+	}
 }
 
 stock fn_alert_query_silence(id) {

@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.28** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.29** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
 Pure enforcement anti-cheat that monitors 38 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
@@ -38,7 +38,7 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 - **Automatic correction** — Forces correct values immediately on violation
 - **Discord notifications** — Grouped violations per player with 5-second batching window
 - **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
-- **Silent-client tripwire** — A client answering no cvar queries at all (the total-query-blocking bypass) trips an audit log line + Discord alert after ~69s of total silence; alert-only, never a kick. Residual: a client selectively blocking only some cvar names is not covered (per-cvar staleness counters are the follow-up if that class ever appears)
+- **Silent-client tripwire** — A client answering no cvar queries at all trips an audit alert after ~69s of total silence, and a client selectively blocking one rotation TIER (e.g. only the 0.3s visual tier) trips a tier-silence alert after ~90s (v7.29). Both alert-only, never a kick. Remaining residual: blocking a single cvar NAME while answering the rest of its tier is not individually tracked (per-name staleness counters if that class ever appears)
 - **Dynamic hud_takesshots** — Only enforced during competitive matches (`.ktp`, `.ktpOT`)
 - **Manual check** — `/cvar` command triggers full parallel query
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
