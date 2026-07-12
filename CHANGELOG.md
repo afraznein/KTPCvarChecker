@@ -2,6 +2,14 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.30] - 2026-07-11
+
+Removed `cl_mousegrab` from enforcement (recurring player request; approved after a research pass).
+
+### Changed
+- **`cl_mousegrab` no longer enforced** — players may now run `cl_mousegrab 0` freely for comfortable windowed / multi-monitor play. It's a client-only SDL pointer-grab cvar: the server never reads it, and aim input comes from `m_rawinput`/cursor-recenter (not the grab), so it has **zero netcode/hitreg/aim surface**. It had been pinned to `1`, which confined windowed-mode players' cursor to the window (catching monitor corners, breaking on alt-tab + multi-monitor) and auto-corrected + chat-shamed anyone running `0`. The only retention rationale was MOSS compatibility — obsolete under KTPAntiCheat. Enforcing `1` also pushed players toward exclusive-fullscreen OpenGL, the AntiCheat's confirmed screenshot-blind mode, so enforcement actively worked *against* capturability. Edge cases (accidentally clicking out of the window mid-round) are pure self-handicaps — same class as the v7.25 `cl_lc`/`cl_lw` removal.
+- Array bookkeeping (mirrors the v7.25 removal): `TOTAL_CVARS` 38→37, `MIN_MAX_CVAR_START` 31→30, `STANDARD_CVARS_COUNT` 23→22, `HUD_TAKESSHOTS_INDEX`/`M_PITCH_INDEX` shifted −1. Monitored set 38→37 (priority 15 unchanged; standard 23→22).
+
 ## [7.29] - 2026-07-08
 
 Closes the selective-tier-blocking residual documented in 7.28.

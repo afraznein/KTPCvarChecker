@@ -2,10 +2,14 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.29
- *   Release Date:      2026-07-08
+ *   Current Version:   7.30
+ *   Release Date:      2026-07-11
  *
  *   Changelog:
+ *   7.30 2026-07-11 - Removed cl_mousegrab from enforcement (client-only SDL pointer-grab
+ *                      cvar, no server/aim surface; MOSS rationale obsolete; enforcing 1
+ *                      pushed windowed players toward capture-blind exclusive-fullscreen GL).
+ *                      TOTAL_CVARS 38->37, standard 23->22, HUD/M_PITCH indices shifted -1.
  *   7.29 2026-07-08 - Per-tier silence tripwire (closes the selective-tier-blocking residual)
  *                    + ADDED: per-tier unanswered counters — a client answering only one
  *                      rotation tier trips event=CVAR_TIER_SILENT + Discord alert after
@@ -172,7 +176,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.29"
+#define PLUGIN_VERSION "7.30"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -191,8 +195,8 @@ new const inverse_p[] = "-0.022";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 38
-#define MIN_MAX_CVAR_START 31
+#define TOTAL_CVARS 37
+#define MIN_MAX_CVAR_START 30
 #define ALT_VALUES_COUNT 7
 
 // Enforcement cvar name length
@@ -200,8 +204,9 @@ new const Float: FLOAT_PRECISION = 0.00005;
 
 // Cvar indices in gs_cvars[] array — must match array positions
 // v7.25: shifted down by 2 after cl_lc/cl_lw removal (was 16, 17)
-#define HUD_TAKESSHOTS_INDEX 14
-#define M_PITCH_INDEX 15
+// v7.30: shifted down 1 more after cl_mousegrab removal (were 14, 15)
+#define HUD_TAKESSHOTS_INDEX 13
+#define M_PITCH_INDEX 14
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
 // v7.27: priority interval 0.5 → 0.3s to absorb the 8 promoted visual cvars —
@@ -260,7 +265,7 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 // Uses per-cvar bitmask to queue multiple violations per player per frame
 #define TASK_DEFER_ENFORCE 3000
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
-new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-5: cvar indices 32-37
+new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-4: cvar indices 32-36
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
 new Float:g_deferCalValue[MAX_PLAYERS + 1][TOTAL_CVARS]  // target float value per cvar
 
@@ -311,14 +316,14 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 }
 
 // All cvars (for initial check and reference)
-// Indices 0-30: exact value cvars, indices 31-37: range cvars (min/max)
+// Indices 0-29: exact value cvars, indices 30-36: range cvars (min/max)
 //
 // v7.24 (2026-04-28): re-added 7 cvars dropped in v7.13 (2026-02-17) under the
 // false rationale "engine-limited values." All actually register with
 // `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
-// freely settable client-side. Indices 23-26 (keyboard-look — defeats
+// freely settable client-side. Indices 22-25 (keyboard-look — defeats
 // alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
-// indices 27-29 (visual-class — gl_picmip enforced at 0 defeats picmip
+// indices 26-28 (visual-class — gl_picmip enforced at 0 defeats picmip
 // wallhack; r_glowshellfreq enforced at 2.2 = DoD default for integrity
 // check only; r_traceglow enforced at 0 = its actual default).
 //
@@ -337,8 +342,19 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 // security benefit (an ESP attacker would just set 0 too). Enforcing the
 // actual default keeps the integrity check (catches autoexec overrides) while
 // removing the false-positive kick path.
+//
+// v7.30 (2026-07-11): removed cl_mousegrab from enforcement. It's a client-only
+// SDL pointer-grab cvar (server never reads it — no netcode/hitreg/aim surface;
+// aim deltas come from m_rawinput/recenter, not grab). The only retention
+// rationale was MOSS compat, obsolete under KTPAntiCheat. Enforcing 1 forced
+// windowed-mode players' cursor to catch monitor corners / break on alt-tab +
+// multi-monitor and pushed them toward exclusive-fullscreen GL — the AntiCheat's
+// screenshot-blind mode — so enforcement actively worked against capturability.
+// Edge cases (accidental click-out mid-round) are pure self-handicaps, same as
+// the v7.25 cl_lc/cl_lw removal. TOTAL_CVARS 38→37, MIN_MAX_CVAR_START 31→30,
+// HUD_TAKESSHOTS/M_PITCH indices −1, STANDARD_CVARS_COUNT 23→22.
 new gs_cvars[TOTAL_CVARS][] = {
-"cl_bobcycle", "cl_bobup", "cl_mousegrab",
+"cl_bobcycle", "cl_bobup",
 "cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
 "gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
 "gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
@@ -351,9 +367,9 @@ new gs_cvars[TOTAL_CVARS][] = {
 
 // Standard cvars (non-priority): checked via rotation every 1.0 seconds
 // Excludes the 15 priority cvars listed above (v7.27: 8 visual cvars moved up)
-#define STANDARD_CVARS_COUNT 23
+#define STANDARD_CVARS_COUNT 22
 new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
-"cl_bobcycle", "cl_bobup", "cl_mousegrab", "cl_showevents", "fastsprites",
+"cl_bobcycle", "cl_bobup", "cl_showevents", "fastsprites",
 "gl_clear", "gl_d3dflip", "gl_nobind",
 "gl_playermip", "hud_takesshots", "r_drawviewmodel",
 "r_dynamic", "s_show",
@@ -363,7 +379,7 @@ new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
 }
 
 new gs_calvalues[TOTAL_CVARS][] = {
-"0.8", "0.5", "1", "89", "89", "0", "0", "0",
+"0.8", "0.5", "89", "89", "0", "0", "0",
 "0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
 "1", "0", "0", "0", "0",
 "225", "210", "0.67", "0.8",
