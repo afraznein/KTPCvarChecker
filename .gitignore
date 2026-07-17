@@ -1,5 +1,5 @@
 # Local dev files (not committed)
-/.claude
+.claude/settings.local.json
 nul
 
 # Compiled output
