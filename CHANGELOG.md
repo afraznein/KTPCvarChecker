@@ -2,6 +2,14 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.31] - 2026-07-18
+
+Discord violation-batching correctness (no cvar-tier or enforcement changes).
+
+### Fixed
+- **Discord violation buffer is now per-player (CV-01).** The plugin batched violations for a grouped embed using a *single global* buffer (`g_discordPlayerName`/`g_discordCvarNames[]`/counts/etc.). Two players violating inside the same 5s `DISCORD_DELAY` window evicted each other: the second player's first violation flushed the first player's partial batch early and reset the buffer, so neither embed reflected the real set of violations. This is the common case at match start (everyone's cvars get swept and corrected at once), not an edge case. The buffer is now `MAX_PLAYERS`-sized parallel arrays indexed by slot (`g_discordPlayerName[MAX_PLAYERS+1]`, etc.), mirroring the existing per-player pattern used for enforcement/defer state. Slot reuse inside the window is still guarded by an authid re-check: if a recycled slot's buffered authid no longer matches the current occupant, the previous occupant's batch is flushed under *their* identity before the new one starts. `send_discord_violations` is now a thin task callback over an internal `flush_discord_violations(id)` that both disconnect and slot-reuse (`client_putinserver`) call directly, so a batch is never silently discarded.
+- **Buffered name/IP refreshed on every violation (CV-02).** Previously the name/IP were copied into the buffer only when a *new* batch window opened; repeat violations from the same player inside an open window kept the name captured at batch start, so a mid-window rename showed a stale name in the eventual embed. Name/IP are now re-copied from `gs_logname`/`gs_logip` on every buffered violation (they're already fetched fresh by `fn_enforce_cvar` right before the call, so it's a copy, not a new lookup).
+
 ## [7.30] - 2026-07-11
 
 Removed `cl_mousegrab` from enforcement (recurring player request; approved after a research pass).

@@ -2,10 +2,17 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.30
- *   Release Date:      2026-07-11
+ *   Current Version:   7.31
+ *   Release Date:      2026-07-18
  *
  *   Changelog:
+ *   7.31 2026-07-18 - Discord violation buffer is now PER-PLAYER (was a single global buffer).
+ *                      Two players violating in the same 5s batch window evicted and fragmented
+ *                      each other's embed — the common case at match start, not an edge case.
+ *                      Buffers are MAX_PLAYERS-sized parallel arrays keyed on slot with authid
+ *                      re-verification for slot reuse. Also refreshes the buffered name/IP on
+ *                      every violation (was only when the batch opened), so a mid-window rename
+ *                      no longer shows a stale name in the embed.
  *   7.30 2026-07-11 - Removed cl_mousegrab from enforcement (client-only SDL pointer-grab
  *                      cvar, no server/aim surface; MOSS rationale obsolete; enforcing 1
  *                      pushed windowed players toward capture-blind exclusive-fullscreen GL).
@@ -176,7 +183,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.30"
+#define PLUGIN_VERSION "7.31"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -282,17 +289,22 @@ new gs_logname[32]
 new gs_logauthid[35]
 new gs_logip[16]
 
-// Discord violation buffering for grouped notifications
-new g_discordPlayerId
-new g_discordPlayerName[32]
-new g_discordPlayerAuthid[35]
-new g_discordPlayerIp[22]
-new g_discordCvarNames[MAX_CVAR_VIOLATIONS][MAX_CVAR_NAME_LEN]
-new Float:g_discordCvarValues[MAX_CVAR_VIOLATIONS]      // Player's bad value
-new Float:g_discordCvarCorrected[MAX_CVAR_VIOLATIONS]   // Corrected to value
-new g_discordCvarCounts[MAX_CVAR_VIOLATIONS]            // Repeat count per cvar
-new g_discordViolationCount                              // Unique cvars in buffer
-new bool:g_discordPending
+// Discord violation buffering for grouped notifications — one buffer PER PLAYER
+// (v7.31). A single global buffer let two players violating in the same 5s window
+// evict and fragment each other's embed — the common case at match start, not an
+// edge case. Slot is the index; identity is re-verified on authid for slot reuse.
+#define DISCORD_NAME_LEN   32
+#define DISCORD_AUTHID_LEN 35
+#define DISCORD_IP_LEN     22
+new g_discordPlayerName[MAX_PLAYERS + 1][DISCORD_NAME_LEN]
+new g_discordPlayerAuthid[MAX_PLAYERS + 1][DISCORD_AUTHID_LEN]
+new g_discordPlayerIp[MAX_PLAYERS + 1][DISCORD_IP_LEN]
+new g_discordCvarNames[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS][MAX_CVAR_NAME_LEN]
+new Float:g_discordCvarValues[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]      // Player's bad value
+new Float:g_discordCvarCorrected[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]   // Corrected to value
+new g_discordCvarCounts[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]            // Repeat count per cvar
+new g_discordViolationCount[MAX_PLAYERS + 1]                              // Unique cvars in buffer
+new bool:g_discordPending[MAX_PLAYERS + 1]
 
 // ============================================================================
 // CVAR CHECKING ARRAYS
@@ -646,6 +658,10 @@ public client_putinserver(id) {
 	gs_enforcing_cvar[id][0] = 0
 	g_deferPending[id] = 0
 	g_deferPendingHi[id] = 0
+	// v7.31: a new connection can beat the previous occupant's disconnect cleanup.
+	// Flush any Discord batch still buffered on this slot (sent under the previous
+	// occupant's stored identity) — this also clears the slot for the new player.
+	flush_discord_violations(id)
 	if (gb_hasViolations[id]) {
 		for (new i = 0; i < TOTAL_CVARS; i++) {
 			gi_enforce_attempts[id][i] = 0
@@ -691,10 +707,9 @@ public client_disconnected(id) {
 	gb_silentAlerted[id] = false
 	gb_queryJustHandled[id] = false
 
-	// Flush any pending Discord violations for this player
-	if (g_discordPending && g_discordPlayerId == id) {
-		remove_task(id + TASK_DISCORD_SEND)
-		send_discord_violations(0)
+	// Flush any pending Discord violations for this player (sends + clears the slot)
+	if (g_discordPending[id]) {
+		flush_discord_violations(id)
 	}
 
 	// Reset enforcement tracking (only loop if player had violations)
@@ -1211,29 +1226,30 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
  * Tracks repeat violations with count
  */
 stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:corrected_value) {
-	// New-player detection is keyed on SteamID, not just slot (v7.27, the
-	// FileChecker 2.6 pattern): a slot reused inside the 5s batch window
-	// would otherwise append the new occupant's violations to the previous
-	// player's buffer under the previous player's identity.
-	if (g_discordPlayerId != id || !equal(g_discordPlayerAuthid, gs_logauthid)) {
-		// Send any pending violations for previous player immediately
-		if (g_discordPending) {
-			remove_task(g_discordPlayerId + TASK_DISCORD_SEND)
-			send_discord_violations(0)
-		}
-
-		// Start buffering for new player
-		g_discordPlayerId = id
-		copy(g_discordPlayerName, charsmax(g_discordPlayerName), gs_logname)
-		copy(g_discordPlayerAuthid, charsmax(g_discordPlayerAuthid), gs_logauthid)
-		copy(g_discordPlayerIp, charsmax(g_discordPlayerIp), gs_logip)
-		g_discordViolationCount = 0
+	// Slot reused inside the 5s batch window (disconnect + new connect on the
+	// same slot): the buffer still holds the previous occupant's violations under
+	// their authid. Flush that batch under its own identity before starting fresh
+	// (v7.27 SteamID-keyed detection, the FileChecker 2.6 pattern).
+	if (g_discordViolationCount[id] > 0 && !equal(g_discordPlayerAuthid[id], gs_logauthid)) {
+		flush_discord_violations(id)
 	}
+
+	// New batch for this slot: pin identity.
+	if (g_discordViolationCount[id] == 0) {
+		copy(g_discordPlayerAuthid[id], DISCORD_AUTHID_LEN - 1, gs_logauthid)
+	}
+
+	// CV-02: refresh name/IP on every violation, not just when the batch opens —
+	// a mid-window rename would otherwise show a stale name in the embed. These
+	// are already fetched fresh into gs_logname/gs_logip by fn_enforce_cvar right
+	// before this call, so it's a copy, not a new lookup.
+	copy(g_discordPlayerName[id], DISCORD_NAME_LEN - 1, gs_logname)
+	copy(g_discordPlayerIp[id], DISCORD_IP_LEN - 1, gs_logip)
 
 	// Check if this cvar is already in the buffer (repeat violation)
 	new cvar_index = -1
-	for (new i = 0; i < g_discordViolationCount; i++) {
-		if (equal(g_discordCvarNames[i], cvar_name)) {
+	for (new i = 0; i < g_discordViolationCount[id]; i++) {
+		if (equal(g_discordCvarNames[id][i], cvar_name)) {
 			cvar_index = i
 			break
 		}
@@ -1241,31 +1257,46 @@ stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:
 
 	if (cvar_index >= 0) {
 		// Existing cvar - increment count and update values
-		g_discordCvarCounts[cvar_index]++
-		g_discordCvarValues[cvar_index] = player_value
-		g_discordCvarCorrected[cvar_index] = corrected_value
-	} else if (g_discordViolationCount < MAX_CVAR_VIOLATIONS) {
+		g_discordCvarCounts[id][cvar_index]++
+		g_discordCvarValues[id][cvar_index] = player_value
+		g_discordCvarCorrected[id][cvar_index] = corrected_value
+	} else if (g_discordViolationCount[id] < MAX_CVAR_VIOLATIONS) {
 		// New cvar - add to buffer
-		copy(g_discordCvarNames[g_discordViolationCount], MAX_CVAR_NAME_LEN - 1, cvar_name)
-		g_discordCvarValues[g_discordViolationCount] = player_value
-		g_discordCvarCorrected[g_discordViolationCount] = corrected_value
-		g_discordCvarCounts[g_discordViolationCount] = 1
-		g_discordViolationCount++
+		new n = g_discordViolationCount[id]
+		copy(g_discordCvarNames[id][n], MAX_CVAR_NAME_LEN - 1, cvar_name)
+		g_discordCvarValues[id][n] = player_value
+		g_discordCvarCorrected[id][n] = corrected_value
+		g_discordCvarCounts[id][n] = 1
+		g_discordViolationCount[id]++
 	}
 
 	// Schedule Discord send with per-player task ID (reset timer on each new violation)
 	remove_task(id + TASK_DISCORD_SEND)
-	g_discordPending = true
+	g_discordPending[id] = true
 	set_task(DISCORD_DELAY, "send_discord_violations", id + TASK_DISCORD_SEND)
 }
 
 /**
- * Send buffered violations as a single grouped Discord embed
+ * Task callback: flush this player's buffered violations as one grouped embed.
+ * taskid is the slot offset by TASK_DISCORD_SEND.
  */
 public send_discord_violations(taskid) {
-	g_discordPending = false
+	flush_discord_violations(taskid - TASK_DISCORD_SEND)
+}
 
-	if (g_discordViolationCount == 0)
+/**
+ * Build + send one player's buffered violations as a single grouped Discord embed,
+ * then clear that player's buffer. Safe to call directly (slot reuse / disconnect
+ * flush) or via the task callback.
+ */
+flush_discord_violations(id) {
+	if (id < 1 || id > MAX_PLAYERS)
+		return
+
+	remove_task(id + TASK_DISCORD_SEND)
+	g_discordPending[id] = false
+
+	if (g_discordViolationCount[id] == 0)
 		return
 
 	// Build description with all cvars
@@ -1274,48 +1305,48 @@ public send_discord_violations(taskid) {
 
 	// Calculate total violations (sum of all counts)
 	new total_violations = 0
-	for (new i = 0; i < g_discordViolationCount; i++) {
-		total_violations += g_discordCvarCounts[i]
+	for (new i = 0; i < g_discordViolationCount[id]; i++) {
+		total_violations += g_discordCvarCounts[id][i]
 	}
 
 	pos += formatex(description[pos], charsmax(description) - pos,
 		"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n**Violations (%d total, %d unique):**^n",
-		g_discordPlayerName, g_discordPlayerAuthid, g_discordPlayerIp, total_violations, g_discordViolationCount)
+		g_discordPlayerName[id], g_discordPlayerAuthid[id], g_discordPlayerIp[id], total_violations, g_discordViolationCount[id])
 
 	// Add cvar list (use integer format for large values like rate/cmdrate)
-	for (new i = 0; i < g_discordViolationCount && pos < charsmax(description) - 100; i++) {
-		new bool:isLarge = (g_discordCvarCorrected[i] >= 100.0)
-		if (g_discordCvarCounts[i] > 1) {
+	for (new i = 0; i < g_discordViolationCount[id] && pos < charsmax(description) - 100; i++) {
+		new bool:isLarge = (g_discordCvarCorrected[id][i] >= 100.0)
+		if (g_discordCvarCounts[id][i] > 1) {
 			if (isLarge)
 				pos += formatex(description[pos], charsmax(description) - pos,
 					"• **%s** (x%d): %d → %d^n",
-					g_discordCvarNames[i], g_discordCvarCounts[i],
-					floatround(g_discordCvarValues[i], floatround_floor), floatround(g_discordCvarCorrected[i], floatround_floor))
+					g_discordCvarNames[id][i], g_discordCvarCounts[id][i],
+					floatround(g_discordCvarValues[id][i], floatround_floor), floatround(g_discordCvarCorrected[id][i], floatround_floor))
 			else
 				pos += formatex(description[pos], charsmax(description) - pos,
 					"• **%s** (x%d): %.3f → %.3f^n",
-					g_discordCvarNames[i], g_discordCvarCounts[i],
-					g_discordCvarValues[i], g_discordCvarCorrected[i])
+					g_discordCvarNames[id][i], g_discordCvarCounts[id][i],
+					g_discordCvarValues[id][i], g_discordCvarCorrected[id][i])
 		} else {
 			if (isLarge)
 				pos += formatex(description[pos], charsmax(description) - pos,
 					"• **%s**: %d → %d^n",
-					g_discordCvarNames[i],
-					floatround(g_discordCvarValues[i], floatround_floor), floatround(g_discordCvarCorrected[i], floatround_floor))
+					g_discordCvarNames[id][i],
+					floatround(g_discordCvarValues[id][i], floatround_floor), floatround(g_discordCvarCorrected[id][i], floatround_floor))
 			else
 				pos += formatex(description[pos], charsmax(description) - pos,
 					"• **%s**: %.3f → %.3f^n",
-					g_discordCvarNames[i],
-					g_discordCvarValues[i], g_discordCvarCorrected[i])
+					g_discordCvarNames[id][i],
+					g_discordCvarValues[id][i], g_discordCvarCorrected[id][i])
 		}
 	}
 
 	// Send to audit channel
 	ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Violations", description, KTP_DISCORD_COLOR_ORANGE)
 
-	// Reset buffer
-	g_discordPlayerId = 0
-	g_discordViolationCount = 0
+	// Reset this player's buffer
+	g_discordViolationCount[id] = 0
+	g_discordPlayerAuthid[id][0] = 0
 }
 
 // ============================================================================
