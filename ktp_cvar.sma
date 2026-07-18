@@ -981,7 +981,7 @@ stock fn_alert_tier_silence(id, tier) {
 		formatex(description, charsmax(description),
 			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n%d consecutive %s-tier cvar queries unanswered over %.0f seconds while OTHER queries are being answered — selective-blocking signature (that tier's cvars are unvalidated for this client). Tripwire only, no action taken.",
 			gs_logname, gs_logauthid, gs_logip, gi_unansweredTier[id][tier], tierName, window)
-		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Tier Silence", description, KTP_DISCORD_COLOR_RED)
+		ktp_discord_send_embed_audit("<:KTP:1002382703020212245> CVAR Tier Silence", description, KTP_DISCORD_COLOR_RED)
 	}
 }
 
@@ -1002,7 +1002,7 @@ stock fn_alert_query_silence(id) {
 		formatex(description, charsmax(description),
 			"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n%d consecutive cvar queries unanswered over %.0f seconds.^nClient is answering no cvar queries at all — enforcement is blind to it. Tripwire only, no action taken.",
 			gs_logname, gs_logauthid, gs_logip, gi_unansweredQueries[id], window)
-		ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Query Silence", description, KTP_DISCORD_COLOR_RED)
+		ktp_discord_send_embed_audit("<:KTP:1002382703020212245> CVAR Query Silence", description, KTP_DISCORD_COLOR_RED)
 	}
 }
 
@@ -1342,7 +1342,7 @@ flush_discord_violations(id) {
 	}
 
 	// Send to audit channel
-	ktp_discord_send_embed_audit("<:ktp:1105490705188659272> CVAR Violations", description, KTP_DISCORD_COLOR_ORANGE)
+	ktp_discord_send_embed_audit("<:KTP:1002382703020212245> CVAR Violations", description, KTP_DISCORD_COLOR_ORANGE)
 
 	// Reset this player's buffer
 	g_discordViolationCount[id] = 0
