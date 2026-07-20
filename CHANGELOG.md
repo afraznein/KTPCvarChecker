@@ -2,6 +2,42 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [Unreleased]
+
+### Removed — stale tracked plugin binary
+
+`ktp_cvar.amxx` sat in the repo root at **7.7**, last touched 2025-12-21, while
+source is 7.31 — twenty-four versions behind. Installation step 2 said "Copy
+`ktp_cvar.amxx`", which resolves to that stale root binary whenever step 1's
+compile is skipped or fails.
+
+Build output belongs in the gitignored `compiled/` dir. Removed; installation now
+uses `compile.sh` (matching the rest of the stack, replacing a raw `amxxpc`
+invocation) and deploys `compiled/ktp_cvar.amxx`. A `/*.amxx` rule prevents
+recurrence.
+
+### Documentation
+
+README corrections, all verified against `ktp_cvar.sma`. The monitored set was
+re-checked item-by-item: 37 total, 15 priority + 22 standard, and the two lists
+are exact complements — the 7.30 `cl_mousegrab` removal and its index shifts are
+correctly reflected everywhere.
+
+- The 22 standard cvars are now spelled out instead of deferred to "see source
+  for full list". The priority list was already enumerated, so a player asking
+  "what do you enforce?" had to read the source for half the answer.
+- Added the `ktp_cvar_silent_tier_secs` row (default `90.0`, `0` disables). It
+  was registered and consumed but named nowhere in the README, so the per-tier
+  tripwire could not be tuned or disabled from the docs.
+- Documented that `<configsdir>/ktp_cvar.cfg` is `exec`'d at plugin init — an
+  operator-owned file that silently sources server cvars had no doc pointer.
+- Installation now includes the language file. `compile.sh` stages only the
+  plugin, so a clean install per the old steps printed raw `%L` keys.
+- Requirements name `ktp_discord.inc` / `ktp_version_reporter.inc`; both live in
+  the KTPAMXX include tree, not this repo.
+- `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
+  one query per tick by design (the engine handles ~1 cvar callback per frame).
+
 ## [7.31] - 2026-07-18
 
 Discord violation-batching correctness (no cvar-tier or enforcement changes).

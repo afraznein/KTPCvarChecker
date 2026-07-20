@@ -40,14 +40,14 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 - **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
 - **Silent-client tripwire** — A client answering no cvar queries at all trips an audit alert after ~69s of total silence, and a client selectively blocking one rotation TIER (e.g. only the 0.3s visual tier) trips a tier-silence alert after ~90s (v7.29). Both alert-only, never a kick. Remaining residual: blocking a single cvar NAME while answering the rest of its tier is not individually tracked (per-name staleness counters if that class ever appears)
 - **Dynamic hud_takesshots** — Only enforced during competitive matches (`.ktp`, `.ktpOT`)
-- **Manual check** — `/cvar` command triggers full parallel query
+- **Manual check** — `/cvar` (say or say_team) triggers a full 37-cvar sweep, priority-first (~12.1s)
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 
 ## Monitored Cvars (37 total)
 
 **Priority (15):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, plus the visual-cheat set: `r_fullbright`, `r_lightmap`, `r_luminance`, `gl_monolights`, `gl_nocolors`, `gl_overbright`, `gl_picmip`, `r_drawentities`
 
-**Standard (22):** Remaining graphics, audio, movement, and gameplay cvars — see source for full list.
+**Standard (22):** `cl_bobcycle`, `cl_bobup`, `cl_showevents`, `fastsprites`, `gl_clear`, `gl_d3dflip`, `gl_nobind`, `gl_playermip`, `hud_takesshots`, `r_drawviewmodel`, `r_dynamic`, `s_show`, `cl_pitchspeed`, `cl_yawspeed`, `cl_anglespeedkey`, `m_side`, `r_glowshellfreq`, `r_traceglow`, `texgamma`, `lightgamma`, `cl_bob`, `fps_max`
 
 **Range cvars (7):** `lightgamma` (1.809-3), `cl_bob` (0-0.011), `cl_updaterate` (100-120), `cl_cmdrate` (100-1000), `rate` (locked 100000), `ex_interp` (0.009-0.05), `fps_max` (60-750).
 
@@ -55,15 +55,20 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 
 - **KTPAMXX** — Custom AMX Mod X with `client_cvar_changed` forward
 - **KTP-ReHLDS** — Custom ReHLDS with `pfnClientCvarChanged` callback
+- **Shared includes** — `ktp_discord.inc` and `ktp_version_reporter.inc` from the KTPAMXX include tree (not in this repo)
 - Not compatible with standard AMX Mod X or ReHLDS
 
 ## Installation
 
-1. Compile: `amxxpc ktp_cvar.sma -oktp_cvar.amxx`
-2. Copy `ktp_cvar.amxx` to `addons/ktpamx/plugins/`
-3. Add to `plugins.ini`
-4. Configure `discord.ini` for Discord alerts (optional, shared with other KTP plugins)
-5. Restart server or change map
+1. Build: `bash compile.sh` (uses the KTPAMXX compiler and writes to `compiled/`)
+2. Copy `compiled/ktp_cvar.amxx` to `addons/ktpamx/plugins/`. The repo ships no
+   prebuilt `.amxx`; build output is gitignored so a stale binary can't be
+   mistaken for the current one.
+3. Copy `data/lang/ktp_cvar.txt` to `addons/ktpamx/data/lang/` — `compile.sh` stages only the
+   plugin, and without the dictionary the startup banner prints raw `%L` keys
+4. Add to `plugins.ini`
+5. Configure `discord.ini` for Discord alerts (optional, shared with other KTP plugins)
+6. Restart server or change map
 
 ## Configuration
 
@@ -72,6 +77,10 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 | `ktp_cvar_discord` | `1` | Enable/disable Discord violation alerts |
 | `ktp_cvar_silent_queries` | `300` | Consecutive unanswered queries before the silent-client tripwire fires (~69s at the steady ~4.3 q/s cadence; past the 60s engine timeout so dead connections drop first). `0` disables |
 | `ktp_cvar_silent_grace` | `60.0` | Seconds after putinserver before the tripwire may fire (still-loading clients answer queued queries late) |
+| `ktp_cvar_silent_tier_secs` | `90.0` | Seconds of per-tier silence before the tier tripwire fires (30-query floor so it can't fire off a stall). `0` disables the tier tripwire; the global one keeps working |
+
+If `<configsdir>/ktp_cvar.cfg` exists it is `exec`'d at plugin init, for server-side
+overrides. Check it first when server cvar state looks unexplained.
 
 Discord integration uses the shared `discord.ini` config. See [KTP Discord Relay](https://github.com/afraznein/DiscordRelay) for setup.
 
