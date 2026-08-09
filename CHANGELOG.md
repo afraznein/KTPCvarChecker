@@ -16,7 +16,10 @@ All notable changes to KTP Cvar Checker will be documented in this file.
 ### Added
 - Init logs a `CVAR TIER MISMATCH` line if the derived count is short, which
   means a `gs_priority_cvars` entry matches no name in `gs_cvars` — a typo or a
-  half-applied rename, previously invisible.
+  half-applied rename, previously invisible. The consequence is a **silent
+  demotion**: the real cvar still gets enforced, but from the standard tier
+  (~22s) instead of priority (~4.5s), and the priority rotation spends one of its
+  15 slots querying a name no client has.
 
 ## [Unreleased]
 

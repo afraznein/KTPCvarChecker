@@ -2,10 +2,17 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.31
- *   Release Date:      2026-07-18
+ *   Current Version:   7.32
+ *   Release Date:      2026-08-09
  *
  *   Changelog:
+ *   7.32 2026-08-09 - Standard cvar tier is DERIVED at init (gs_cvars minus
+ *                      gs_priority_cvars) instead of a hand-typed 22-entry array that
+ *                      every add/remove/retier had to be replayed into, unchecked. A
+ *                      cvar dropped from the typed list would have been enforced by
+ *                      neither tier. Init also logs CVAR TIER MISMATCH when a priority
+ *                      name matches nothing in gs_cvars -- that cvar is silently
+ *                      demoted to the slow tier and a priority slot is wasted.
  *   7.31 2026-07-18 - Discord violation buffer is now PER-PLAYER (was a single global buffer).
  *                      Two players violating in the same 5s batch window evicted and fragmented
  *                      each other's embed — the common case at match start, not an edge case.
@@ -498,8 +505,10 @@ public plugin_init() {
 	}
 
 	// A short count means a gs_priority_cvars entry matched nothing in gs_cvars
-	// (typo, or a rename applied to one list only) -- that cvar is then enforced
-	// by neither tier, which is silent by construction.
+	// (typo, or a rename applied to one list only). The real cvar then falls into
+	// the standard tier instead of priority -- silently demoted from a ~4.5s
+	// check to a ~22s one -- and the priority rotation burns one of its 15 slots
+	// querying a name no client has.
 	if (gi_standardCvarCount != TOTAL_CVARS - PRIORITY_CVARS_COUNT) {
 		log_amx("[%s] CVAR TIER MISMATCH: %d standard, expected %d -- a priority name does not exist in gs_cvars",
 			PLUGIN_NAME, gi_standardCvarCount, TOTAL_CVARS - PRIORITY_CVARS_COUNT)
