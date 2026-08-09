@@ -2,6 +2,22 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## [7.32] - 2026-08-09
+
+### Changed
+- The standard-tier cvar list is now **derived** at init as `gs_cvars` minus
+  `gs_priority_cvars`, replacing a hand-typed 22-entry array. Adding, removing or
+  re-tiering a cvar meant replaying the edit into a second list by hand, with
+  nothing checking the two agreed — a cvar dropped from the typed list would be
+  enforced by neither tier and go silent with no error. The two lists did still
+  agree when this was written (verified 22/22, both directions); the change is to
+  make them unable to disagree.
+
+### Added
+- Init logs a `CVAR TIER MISMATCH` line if the derived count is short, which
+  means a `gs_priority_cvars` entry matches no name in `gs_cvars` — a typo or a
+  half-applied rename, previously invisible.
+
 ## [Unreleased]
 
 ### Removed — stale tracked plugin binary

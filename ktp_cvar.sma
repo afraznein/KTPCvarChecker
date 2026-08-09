@@ -183,7 +183,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.31"
+#define PLUGIN_VERSION "7.32"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -220,7 +220,7 @@ new const Float: FLOAT_PRECISION = 0.00005;
 // netcode cvars keep a ~4.5s full cycle (was 3.5s) while the visual-cheat set
 // drops from a 31s cycle to 4.5s (a scripted toggle-peek fit comfortably in 31s).
 #define PRIORITY_CHECK_INTERVAL 0.3   // Priority cvar rotation: full cycle = PRIORITY_CVARS_COUNT * this
-#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: full cycle = STANDARD_CVARS_COUNT * this
+#define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: full cycle = gi_standardCvarCount * this
 #define INITIAL_SWEEP_INTERVAL  0.3   // Initial-sweep query spacing (README/CHANGELOG timing math keys off this)
 
 // Priority cvar count (v7.27: 7 → 15 with the visual-cheat set promoted)
@@ -377,18 +377,12 @@ new gs_cvars[TOTAL_CVARS][] = {
 "cl_cmdrate", "rate", "ex_interp", "fps_max"
 }
 
-// Standard cvars (non-priority): checked via rotation every 1.0 seconds
-// Excludes the 15 priority cvars listed above (v7.27: 8 visual cvars moved up)
-#define STANDARD_CVARS_COUNT 22
-new gs_standard_cvars[STANDARD_CVARS_COUNT][] = {
-"cl_bobcycle", "cl_bobup", "cl_showevents", "fastsprites",
-"gl_clear", "gl_d3dflip", "gl_nobind",
-"gl_playermip", "hud_takesshots", "r_drawviewmodel",
-"r_dynamic", "s_show",
-"cl_pitchspeed", "cl_yawspeed", "cl_anglespeedkey", "m_side",
-"r_glowshellfreq", "r_traceglow",
-"texgamma", "lightgamma", "cl_bob", "fps_max"
-}
+// Standard cvars (non-priority): checked via rotation every 1.0 seconds.
+// DERIVED at init as gs_cvars minus gs_priority_cvars -- it used to be a
+// hand-typed list that every cvar add/remove/retier had to be replayed into,
+// with nothing checking the two agreed.
+new gi_standardCvarIdx[TOTAL_CVARS]
+new gi_standardCvarCount
 
 new gs_calvalues[TOTAL_CVARS][] = {
 "0.8", "0.5", "89", "89", "0", "0", "0",
@@ -497,6 +491,20 @@ public plugin_init() {
 		}
 	}
 
+	gi_standardCvarCount = 0
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		if (!gb_isPriorityCvar[i])
+			gi_standardCvarIdx[gi_standardCvarCount++] = i
+	}
+
+	// A short count means a gs_priority_cvars entry matched nothing in gs_cvars
+	// (typo, or a rename applied to one list only) -- that cvar is then enforced
+	// by neither tier, which is silent by construction.
+	if (gi_standardCvarCount != TOTAL_CVARS - PRIORITY_CVARS_COUNT) {
+		log_amx("[%s] CVAR TIER MISMATCH: %d standard, expected %d -- a priority name does not exist in gs_cvars",
+			PLUGIN_NAME, gi_standardCvarCount, TOTAL_CVARS - PRIORITY_CVARS_COUNT)
+	}
+
 	// Discord webhook logging now uses shared ktp_discord.inc
 
 	// Register /cvar command for manual cvar check
@@ -564,7 +572,7 @@ public fn_servermessage() {
 
 	server_print("[%s] Monitoring %d cvars with priority-based system:", PLUGIN_NAME, TOTAL_CVARS)
 	server_print("[%s] - Priority cvars (%d): checked every %.1f seconds", PLUGIN_NAME, PRIORITY_CVARS_COUNT, PRIORITY_CHECK_INTERVAL)
-	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", PLUGIN_NAME, STANDARD_CVARS_COUNT, STANDARD_CHECK_INTERVAL)
+	server_print("[%s] - Standard cvars (%d): rotated every %.0f seconds", PLUGIN_NAME, gi_standardCvarCount, STANDARD_CHECK_INTERVAL)
 	server_print("[%s] Enforcement: Auto-correct + console logging (Discord: %s)", PLUGIN_NAME, get_pcvar_num(gp_cvar_discord) ? "enabled" : "disabled")
 }
 
@@ -867,13 +875,17 @@ public fn_check_standard_cvars(taskid) {
 		return
 
 	// Send ONE query per tick (engine only processes ~1 callback per frame)
+	// Guards the modulo below: every cvar being priority would divide by zero.
+	if (gi_standardCvarCount < 1)
+		return
+
 	new idx = gi_standard_cvar_index[id]
-	query_client_cvar(id, gs_standard_cvars[idx], "fn_querycvar")
+	query_client_cvar(id, gs_cvars[gi_standardCvarIdx[idx]], "fn_querycvar")
 	fn_note_query_sent(id)
 	fn_note_tier_query(id, TIER_STANDARD)
 
 	// Rotate to next standard cvar
-	gi_standard_cvar_index[id] = (idx + 1) % STANDARD_CVARS_COUNT
+	gi_standard_cvar_index[id] = (idx + 1) % gi_standardCvarCount
 }
 
 // ============================================================================
