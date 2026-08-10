@@ -2,25 +2,6 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
-## [7.32] - 2026-08-09
-
-### Changed
-- The standard-tier cvar list is now **derived** at init as `gs_cvars` minus
-  `gs_priority_cvars`, replacing a hand-typed 22-entry array. Adding, removing or
-  re-tiering a cvar meant replaying the edit into a second list by hand, with
-  nothing checking the two agreed — a cvar dropped from the typed list would be
-  enforced by neither tier and go silent with no error. The two lists did still
-  agree when this was written (verified 22/22, both directions); the change is to
-  make them unable to disagree.
-
-### Added
-- Init logs a `CVAR TIER MISMATCH` line if the derived count is short, which
-  means a `gs_priority_cvars` entry matches no name in `gs_cvars` — a typo or a
-  half-applied rename, previously invisible. The consequence is a **silent
-  demotion**: the real cvar still gets enforced, but from the standard tier
-  (~22s) instead of priority (~4.5s), and the priority rotation spends one of its
-  15 slots querying a name no client has.
-
 ## [Unreleased]
 
 ### Removed — stale tracked plugin binary
@@ -56,6 +37,26 @@ correctly reflected everywhere.
   the KTPAMXX include tree, not this repo.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
+
+## [7.32] - 2026-08-09
+
+### Changed
+- The standard-tier cvar list is now **derived** at init as `gs_cvars` minus
+  `gs_priority_cvars`, replacing a hand-typed 22-entry array. Adding, removing or
+  re-tiering a cvar meant replaying the edit into a second list by hand, with
+  nothing checking the two agreed — a cvar dropped from the typed list would be
+  enforced by neither tier and go silent with no error. The two lists did still
+  agree when this was written (verified 22/22, both directions); the change is to
+  make them unable to disagree.
+
+### Added
+- Init logs a `CVAR TIER MISMATCH` line if the derived count is short, which
+  means a `gs_priority_cvars` entry matches no name in `gs_cvars` — a typo or a
+  half-applied rename, previously invisible. The consequence is a **silent
+  demotion**: the real cvar still gets enforced, but from the standard tier
+  (~22s) instead of priority (~4.5s), and the priority rotation spends one of its
+  15 slots querying a name no client has.
+
 
 ## [7.31] - 2026-07-18
 
