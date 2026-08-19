@@ -3,6 +3,24 @@
 
 set -e  # Exit on error
 
+# A failed build must be VISIBLE, not merely non-zero. Callers pipe this script
+# (`| tail`, `| tee`), and the shell then reports the PIPE's status -- so a failed
+# build reads as exit 0 unless the log itself says so. Gate on the banners below,
+# never on the exit code.
+_ktp_build_exit() {
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo ""
+        echo "========================================"
+        echo "[KTP-BUILD] FAILED: KTPCvarChecker compile.sh exited $rc"
+        echo "========================================"
+        echo "Nothing has been staged."
+    fi
+    exit "$rc"
+}
+trap _ktp_build_exit EXIT
+
+
 echo "========================================"
 echo "KTPCvarChecker Plugin Compiler (WSL)"
 echo "========================================"
@@ -112,9 +130,13 @@ sed 's/\r$//' "$SCRIPT_DIR/$PLUGIN_NAME.sma" > "$TEMP_BUILD/$PLUGIN_NAME.sma"
 
 # Compile
 cd "$TEMP_BUILD"
+# `set -e` would kill the script here, so the check below never ran.
+set +e
 ./amxxpc "$PLUGIN_NAME.sma" -i./include -o"$PLUGIN_NAME.amxx"
+AMXXPC_RC=$?
+set -e
 
-if [ $? -ne 0 ]; then
+if [ "$AMXXPC_RC" -ne 0 ]; then
     echo
     echo "========================================"
     echo "[FAILED] Compilation failed!"
@@ -147,3 +169,7 @@ fi
 
 echo
 echo "Done!"
+
+# Success sentinel, last line on the only path that reaches here. A caller checks
+# for this rather than for `$?`, which a pipe launders.
+echo "[KTP-BUILD] OK: KTPCvarChecker compile.sh"
