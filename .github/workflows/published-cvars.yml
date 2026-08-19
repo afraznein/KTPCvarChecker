@@ -1,0 +1,32 @@
+# Does the published CVAR list still match the one this plugin enforces?
+#
+# The doc lives in a DIFFERENT repo (afraznein/KTP_Documentation), so drift can
+# start on either side and neither repo's CI would notice on its own:
+#   - change the plugin, forget the doc  -> caught by the push trigger below
+#   - change the doc, forget the plugin  -> caught only by the schedule
+# The schedule is not belt-and-braces; without it half the drift is invisible.
+
+name: Published CVARs
+
+on:
+  push:
+    branches: ['**']
+    paths: ['ktp_cvar.sma', 'tools/check_published_cvars.py']
+  pull_request:
+    paths: ['ktp_cvar.sma', 'tools/check_published_cvars.py']
+  schedule:
+    # Mondays 08:00 UTC — a season rarely turns over faster than that, and the
+    # failure is a stale doc rather than a broken server.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare enforced vs published
+        run: python3 tools/check_published_cvars.py
