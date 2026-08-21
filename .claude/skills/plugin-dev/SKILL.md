@@ -28,6 +28,14 @@ production incident or a confirmed review finding.
   (querycvar marks handled, the forward consumes and skips) — if you add a new
   response-handling path, it needs the same dedup or you'll double-validate
   (functionally harmless but silently doubles per-player work fleet-wide).
+- **`ktp_match_competitive` is KTPMatchHandler's state, and this plugin cannot
+  tell when it goes stale.** `hud_takesshots` enforcement is gated on it, engine
+  cvars survive a changelevel, and extension mode never reloads plugins — so any
+  MatchHandler teardown path that misses the reset leaves the flag latched, and
+  this plugin then enforces competitive-only rules on pub play indefinitely. From
+  here a latched `1` is indistinguishable from a live match. Anyone asking "why is
+  this pub server enforcing match settings" will start in this plugin and find
+  nothing wrong; the answer is upstream.
 - **Slot recycle**: `client_putinserver` must explicitly clear ALL per-slot
   state (enforcement-attempt counts, defer bitmasks, the echo-suppression slot,
   liveness counters, in-progress-check flags) rather than relying on the
@@ -88,7 +96,23 @@ suspicious" rather than "changes what the server/client actually does",
 don't add it — or be ready to justify it same as `cl_mousegrab` needed to be
 un-justified.
 
+The same scrutiny applies to the *value*, not just the choice to enforce.
+Enforcing anything other than the engine's own default converts every untouched,
+compliant client into a violation, so a deviation needs a specific exploit it
+blocks — and that rationale has to survive the question "would an attacker simply
+set this too?" The `r_glowshellfreq` case is the worked example on both counts.
+
 ## Pawn checklist (apply to every diff)
+- **Never "tidy" the monitoring rotations' `set_task(..., "", 0, "b")` into
+  `_, _`.** Passing Pawn's `_` placeholder for the `parameter[]`/`len` arguments
+  makes `set_task` fail to register the `"b"` repeat — no error, no log line, and
+  a plugin that loads and reports perfectly healthy. That is how the entire
+  polling path stayed dead for many versions: the real-time
+  `client_cvar_changed` forward kept catching mid-session changes, so violations
+  kept reaching Discord while every player who *joined with* a bad value went
+  undetected. The silent-client tripwire cannot catch it either — it counts
+  unanswered queries, and a task that never fires sends none, so the counter
+  never advances. The explicit arguments are the fix, not clutter.
 - `charsmax(buf)` for every format/copy.
 - Any new per-player state needs a slot-recycle clear in `client_putinserver`
   AND a `client_disconnected` clear — both, not either.
