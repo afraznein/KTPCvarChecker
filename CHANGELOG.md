@@ -38,6 +38,47 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.33] - 2026-08-26
+
+### Added
+- **cl_lc / cl_lw observation — log-only, deliberately NOT enforcement.** The
+  v7.25 removal of both from enforcement stands: either flag at 0 is a strict
+  self-handicap on the shooter, and permitting it was a player-facing decision.
+  What changed is visibility. The engine skips lag compensation entirely when
+  either flag is 0 (`SV_SetupMove` returns before any rewind), and an **absent**
+  userinfo key parses as 0 (`SV_ExtractFromUserinfo`), so a player can be
+  playing with zero lag compensation on their own shots without ever touching a
+  cvar — a leading candidate for recurring "not hittable / inconsistent"
+  reports. The plugin now reads both flags straight from userinfo (the same
+  string the engine parses — no `query_client_cvar` traffic, no tier-array
+  changes) once at monitoring start, and re-reads on `client_infochanged`,
+  logging only on an actual transition.
+- Log events, all structured key=value in the house style:
+  - `LAGCOMP_OFF` — initial sample found lc/lw not both 1
+  - `LAGCOMP_CHANGED` — a sampled player's flags flipped mid-session (includes
+    `prev_lc`/`prev_lw`; a flip back to 1/1 logs too — the transition is the
+    signal)
+  - `LAGCOMP_SAMPLER_OK` — once per map **load**, from the first sampled
+    player, whatever their values. An exceptions-only feature that silently
+    breaks is indistinguishable from a fleet with no exceptions; this line is
+    the liveness proof. Keyed on a `plugin_init`-reset bool, not the map name:
+    halftime and every OT round changelevel to the *same* map, and
+    extension-mode globals survive the changelevel, so a name compare would be
+    silent for exactly the halves that matter.
+- **Volume: a 1/1 player (the normal case) writes zero log lines.** Per-player
+  connect logging was removed in 7.21 over disk-write volume; this feature
+  keeps that property. A connect wave costs one line per affected player plus
+  the single per-map-load sanity line. `LAGCOMP_CHANGED` is bounded by the
+  engine itself: userinfo dispatches are throttled to at most one per client
+  per second (`SV_UpdateUserInfo` pushes `sendinfo_time` a second out), and
+  sub-second flips that land back where they started coalesce against the
+  cached state to nothing — so a client deliberately toggling can sustain at
+  most ~1 line/s, and cannot amplify.
+- Caveat, so a quiet log is read correctly: the transition path rides the
+  ReHLDS userinfo hookchain (`ktp_userinfo_hook`). With that cvar at 0,
+  `LAGCOMP_CHANGED` goes silent while `LAGCOMP_SAMPLER_OK` keeps reporting
+  healthy — the heartbeat proves the sampler, not the transition path.
+
 ## [7.32] - 2026-08-09
 
 ### Changed
