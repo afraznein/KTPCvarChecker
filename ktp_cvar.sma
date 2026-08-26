@@ -2,10 +2,18 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.32
- *   Release Date:      2026-08-09
+ *   Current Version:   7.33
+ *   Release Date:      2026-08-26
  *
  *   Changelog:
+ *   7.33 2026-08-26 - Observe cl_lc/cl_lw (log-only — the v7.25 enforcement removal
+ *                      stands). SV_SetupMove skips lag compensation entirely when
+ *                      either flag is 0, and an ABSENT userinfo key parses as 0, so
+ *                      an affected player leads by their full ping without ever
+ *                      touching a cvar. Read from userinfo at monitoring start and
+ *                      on client_infochanged transitions; a 1/1 player (the normal
+ *                      case) writes no log line. Events: LAGCOMP_OFF,
+ *                      LAGCOMP_CHANGED, LAGCOMP_SAMPLER_OK (once per map load).
  *   7.32 2026-08-09 - Standard cvar tier is DERIVED at init (gs_cvars minus
  *                      gs_priority_cvars) instead of a hand-typed 22-entry array that
  *                      every add/remove/retier had to be replayed into, unchecked. A
@@ -190,7 +198,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.32"
+#define PLUGIN_VERSION "7.33"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -461,6 +469,24 @@ new bool:gb_tierAlerted[MAX_PLAYERS + 1][2]
 new bool:gb_isPriorityCvar[TOTAL_CVARS]
 new gp_cvar_silent_tier_secs
 
+// v7.33: cl_lc/cl_lw observation — log-only, never enforced (v7.25 removed both
+// from enforcement deliberately: either flag at 0 only self-handicaps the
+// shooter). The engine gates lag comp on BOTH flags — SV_SetupMove returns
+// before any rewind when lw or lc is 0 — and an ABSENT userinfo key parses as
+// 0, so a player can be uncompensated without ever touching a cvar. Read
+// straight from userinfo, the same string the engine parses: no query-rotation
+// traffic, no tier-array changes. Exceptions and transitions only — a 1/1
+// player writes no line (per-player connect logging was removed in 7.21 over
+// disk-write volume).
+#define LAGCOMP_UNKNOWN -1
+#define LAGCOMP_BOTH_ON 3
+new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
+// One sanity line per map LOAD, keyed on this bool and not the map name:
+// halftime and every OT round changelevel to the SAME map, and extension-mode
+// globals survive the changelevel — a name compare stays silent for exactly
+// the halves that matter. plugin_init re-fires per map change and resets it.
+new bool:gb_lagcompHeartbeatDone
+
 // ============================================================================
 // PLUGIN INITIALIZATION
 // ============================================================================
@@ -513,6 +539,14 @@ public plugin_init() {
 		log_amx("[%s] CVAR TIER MISMATCH: %d standard, expected %d -- a priority name does not exist in gs_cvars",
 			PLUGIN_NAME, gi_standardCvarCount, TOTAL_CVARS - PRIORITY_CVARS_COUNT)
 	}
+
+	// Globals load as 0, and 0 is a VALID sampled lagcomp state (lc=0, lw=0) —
+	// the unknown sentinel must be set explicitly or an unsampled slot reads as
+	// the exact population this feature hunts. Re-fires per map change in
+	// extension mode; putinserver re-arms the sample for players who stay.
+	for (new i = 1; i <= MAX_PLAYERS; i++)
+		gi_lagcompState[i] = LAGCOMP_UNKNOWN
+	gb_lagcompHeartbeatDone = false
 
 	// Discord webhook logging now uses shared ktp_discord.inc
 
@@ -656,7 +690,16 @@ public fn_msginitial(id) {
 }
 
 public client_putinserver(id) {
-	if (id < 1 || id > MAX_PLAYERS || is_user_bot(id) || is_user_hltv(id))
+	if (id < 1 || id > MAX_PLAYERS)
+		return
+
+	// Set BEFORE the bot/HLTV return: those slots are never sampled, and this
+	// sentinel is the only thing that makes client_infochanged skip them —
+	// the HLTV proxy DOES reach that forward (KTPAMXX excludes only
+	// FL_FAKECLIENT), and a recycled slot must not inherit a sampled state
+	gi_lagcompState[id] = LAGCOMP_UNKNOWN
+
+	if (is_user_bot(id) || is_user_hltv(id))
 		return
 
 	gb_FirstCheckComplete[id] = false
@@ -723,6 +766,7 @@ public client_disconnected(id) {
 	gi_unansweredQueries[id] = 0
 	gb_silentAlerted[id] = false
 	gb_queryJustHandled[id] = false
+	gi_lagcompState[id] = LAGCOMP_UNKNOWN
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
 	if (g_discordPending[id]) {
@@ -851,6 +895,10 @@ public fn_start_monitoring(id) {
 	set_task(STANDARD_CHECK_INTERVAL, "fn_check_standard_cvars", id + 2000, "", 0, "b")
 
 	// Removed: log_amx per-player monitoring start — 24 disk writes per match connect wave
+
+	// One-shot cl_lc/cl_lw read now that the player has settled (userinfo is
+	// long since parsed by this point); client_infochanged catches later flips
+	fn_lagcomp_sample(id)
 }
 
 /**
@@ -1025,6 +1073,82 @@ stock fn_alert_query_silence(id) {
 			gs_logname, gs_logauthid, gs_logip, gi_unansweredQueries[id], window)
 		ktp_discord_send_embed_audit("<:KTP:1002382703020212245> CVAR Query Silence", description, KTP_DISCORD_COLOR_RED)
 	}
+}
+
+// ============================================================================
+// LAG-COMP FLAG OBSERVATION (v7.33) — cl_lc/cl_lw, log-only
+// ============================================================================
+
+// Mirrors the engine parse: absent key = 0, else atoi != 0 (str_to_num("") is
+// 0, so absent and "0" read alike). Userinfo is also the only correct source —
+// the infochanged forward fires BEFORE the engine assigns cl->lw/lc, so
+// engine-side state would return the PREVIOUS values on every transition.
+stock fn_lagcomp_read(id) {
+	new buf[16]
+	get_user_info(id, "cl_lc", buf, charsmax(buf))
+	new flags = (str_to_num(buf) != 0) ? 1 : 0
+	get_user_info(id, "cl_lw", buf, charsmax(buf))
+	if (str_to_num(buf) != 0)
+		flags |= 2
+	return flags
+}
+
+// Initial sample at monitoring start. The once-per-map-load sanity line exists
+// because an exceptions-only feature that silently breaks reads identically to
+// a fleet with no exceptions. The permanently connected HLTV proxy pins
+// cl_lw/cl_lc to 1/1 (a standing known-good) but is never sampled — putinserver
+// skips HLTV before scheduling monitoring.
+stock fn_lagcomp_sample(id) {
+	new flags = fn_lagcomp_read(id)
+	gi_lagcompState[id] = flags
+
+	if (!gb_lagcompHeartbeatDone) {
+		gb_lagcompHeartbeatDone = true
+		new map[32]
+		get_mapname(map, charsmax(map))
+		get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+		log_amx("[%s] event=LAGCOMP_SAMPLER_OK map=%s sid=%s lc=%d lw=%d",
+			PLUGIN_NAME, map, gs_logauthid, flags & 1, (flags >> 1) & 1)
+	}
+
+	if (flags != LAGCOMP_BOTH_ON)
+		fn_lagcomp_log(id, "LAGCOMP_OFF", flags, LAGCOMP_UNKNOWN)
+}
+
+stock fn_lagcomp_log(id, const event[], flags, prev) {
+	get_user_name(id, gs_logname, charsmax(gs_logname))
+	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
+
+	if (prev == LAGCOMP_UNKNOWN) {
+		log_amx("[%s] event=%s sid=%s name=%s ip=%s lc=%d lw=%d",
+			PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip,
+			flags & 1, (flags >> 1) & 1)
+	}
+	else {
+		log_amx("[%s] event=%s sid=%s name=%s ip=%s lc=%d lw=%d prev_lc=%d prev_lw=%d",
+			PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip,
+			flags & 1, (flags >> 1) & 1, prev & 1, (prev >> 1) & 1)
+	}
+}
+
+// Fires on every userinfo edit — name changes are the common case — so compare
+// against the cached state and only a real flip logs. Unsampled players
+// (still loading, bots, HLTV) stay at LAGCOMP_UNKNOWN and return early.
+public client_infochanged(id) {
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id])
+		return
+	if (gi_lagcompState[id] == LAGCOMP_UNKNOWN)
+		return
+
+	new flags = fn_lagcomp_read(id)
+	if (flags == gi_lagcompState[id])
+		return
+
+	new prev = gi_lagcompState[id]
+	gi_lagcompState[id] = flags
+	// A flip back to 1/1 logs too — the transition is the signal
+	fn_lagcomp_log(id, "LAGCOMP_CHANGED", flags, prev)
 }
 
 // ============================================================================
