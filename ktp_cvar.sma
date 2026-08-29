@@ -6,16 +6,17 @@
  *   Release Date:      2026-08-26
  *
  *   Changelog:
- *   7.34 2026-08-29 - Observe rate/cl_updaterate from userinfo and flag an
- *                      ex_interp/cl_updaterate mismatch (log-only, nothing new
- *                      enforced). The enforced RANGES already permit a client
- *                      that is compliant on both cvars yet extrapolating:
- *                      cl_updaterate 100-120 with ex_interp 0.009-0.05 means
- *                      ex_interp 0.009 at updaterate 100 sits under the 0.010
- *                      packet interval. Each cvar is validated alone, so the
- *                      RELATIONSHIP has never been checked. Zero added queries:
- *                      all three keys come from userinfo, the same string the
- *                      engine parses, on the path 7.33 already uses.
+ *   7.34 2026-08-29 - Observe rate/cl_updaterate from userinfo (log-only,
+ *                      nothing new enforced). These two are not incidental
+ *                      settings: the engine assigns rate to cl->netchan.rate and
+ *                      cl_updaterate to cl->next_messageinterval, so they ARE the
+ *                      client's bandwidth cap and packet cadence. Zero added
+ *                      queries -- same userinfo path 7.33 uses for cl_lc/cl_lw,
+ *                      and a mid-session edit logs immediately instead of waiting
+ *                      up to a full rotation cycle.
+ *                      NOTE: ex_interp is NOT a transmitted userinfo field, so it
+ *                      cannot be read this way; a paired interp check needs the
+ *                      query path and is deliberately left out of this version.
  *   7.33 2026-08-26 - Observe cl_lc/cl_lw (log-only — the v7.25 enforcement removal
  *                      stands). SV_SetupMove skips lag compensation entirely when
  *                      either flag is 0, and an ABSENT userinfo key parses as 0, so
@@ -492,8 +493,6 @@ new gp_cvar_silent_tier_secs
 // Netcode observation (v7.34). Absent-vs-zero is the whole hazard here: an
 // absent userinfo key parses as 0, and 0 would read as "extrapolating badly".
 #define NETOBS_UNKNOWN -1
-// Guards float equality at the exact boundary (ex_interp 0.01 vs 1/100).
-#define INTERP_EPSILON 0.0001
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
 new gi_netRate[MAX_PLAYERS + 1]        // NETOBS_UNKNOWN until sampled
@@ -1163,11 +1162,15 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 // NETCODE OBSERVATION (v7.34) — rate / cl_updaterate / ex_interp, log-only
 // ============================================================================
 
-// Reads the three keys the engine itself parses out of userinfo. Returns false
-// when a key is ABSENT: str_to_num("") is 0, and a 0 here would read as a real
-// and alarming value rather than "not supplied", so absent must never reach the
-// comparisons below.
-stock bool:fn_netobs_read(id, &rate, &updaterate, &Float:interp) {
+// Reads the two netcode keys the engine itself parses out of userinfo. These
+// are not incidental: `rate` becomes cl->netchan.rate and `cl_updaterate`
+// becomes cl->next_messageinterval, so they ARE the client's bandwidth cap and
+// packet cadence. Returns false when a key is ABSENT -- str_to_num("") is 0, and
+// a 0 here would read as a real and alarming value rather than "not supplied".
+// ex_interp is deliberately not read here: it is NOT a transmitted userinfo
+// field (engine info.cpp g_info_important_fields), so get_user_info returns
+// empty for it on every player.
+stock bool:fn_netobs_read(id, &rate, &updaterate) {
 	new buf[16]
 
 	get_user_info(id, "rate", buf, charsmax(buf))
@@ -1179,11 +1182,6 @@ stock bool:fn_netobs_read(id, &rate, &updaterate, &Float:interp) {
 	if (buf[0] == EOS)
 		return false
 	updaterate = str_to_num(buf)
-
-	// ex_interp may legitimately be absent while the other two are present;
-	// report it as 0.0 and let the caller skip the interp comparison only.
-	get_user_info(id, "ex_interp", buf, charsmax(buf))
-	interp = (buf[0] == EOS) ? 0.0 : str_to_float(buf)
 
 	return true
 }
@@ -1197,30 +1195,12 @@ stock fn_netobs_log(id, const event[], const detail[]) {
 		PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip, detail)
 }
 
-// ex_interp below 1/cl_updaterate means the client runs out of snapshots and
-// EXTRAPOLATES, which looks to everyone else like the player warping. Both cvars
-// are enforced individually and both can be in range while their ratio is not,
-// so this is the only place the pairing is checked.
-stock fn_netobs_interp_check(id, updaterate, Float:interp) {
-	if (interp <= 0.0 || updaterate <= 0)
-		return
-
-	new Float:need = 1.0 / float(updaterate)
-	if (interp < need - INTERP_EPSILON) {
-		new detail[96]
-		formatex(detail, charsmax(detail),
-			"ex_interp=%.4f cl_updaterate=%d need=%.4f", interp, updaterate, need)
-		fn_netobs_log(id, "NETOBS_INTERP_LOW", detail)
-	}
-}
-
 // One-shot at monitoring start, same settle point as the lag-comp sample. The
 // heartbeat exists for the same reason that one does: silence from an
 // exceptions-only check is indistinguishable from silence from a broken check.
 stock fn_netobs_sample(id) {
 	new rate, updaterate
-	new Float:interp
-	if (!fn_netobs_read(id, rate, updaterate, interp))
+	if (!fn_netobs_read(id, rate, updaterate))
 		return
 
 	gi_netRate[id] = rate
@@ -1234,8 +1214,6 @@ stock fn_netobs_sample(id) {
 		log_amx("[%s] event=NETOBS_SAMPLER_OK map=%s sid=%s rate=%d updaterate=%d",
 			PLUGIN_NAME, map, gs_logauthid, rate, updaterate)
 	}
-
-	fn_netobs_interp_check(id, updaterate, interp)
 }
 
 // Fires on every userinfo edit — name changes are the common case — so compare
@@ -1261,8 +1239,7 @@ public client_infochanged(id) {
 		return
 
 	new rate, updaterate
-	new Float:interp
-	if (!fn_netobs_read(id, rate, updaterate, interp))
+	if (!fn_netobs_read(id, rate, updaterate))
 		return
 	if (rate == gi_netRate[id] && updaterate == gi_netUpdaterate[id])
 		return
@@ -1274,8 +1251,6 @@ public client_infochanged(id) {
 	gi_netRate[id] = rate
 	gi_netUpdaterate[id] = updaterate
 	fn_netobs_log(id, "NETOBS_CHANGED", detail)
-
-	fn_netobs_interp_check(id, updaterate, interp)
 }
 
 // ============================================================================

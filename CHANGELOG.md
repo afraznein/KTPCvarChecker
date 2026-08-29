@@ -45,28 +45,50 @@ correctly reflected everywhere.
 `rate` and `cl_updaterate` are now read from userinfo alongside the 7.33
 `cl_lc`/`cl_lw` sample, and a mid-session edit to either logs `NETOBS_CHANGED`
 off the same `client_infochanged` forward. The query rotation would eventually
-notice, but only after up to a full cycle; the userinfo path is instant, costs
-no queries, and reads the same string the engine itself parses.
+notice, but only after up to a full cycle; the userinfo path is instant and
+costs no queries.
 
-Also adds `NETOBS_INTERP_LOW`, which is the first check in this plugin that
-looks at a **relationship between two cvars** rather than at one cvar alone.
-That gap was real: the enforced ranges are `cl_updaterate` 100-120 and
-`ex_interp` 0.009-0.05, so a client at `cl_updaterate 100` with `ex_interp
-0.009` passes both rules while sitting under the 0.010 packet interval — which
-means it runs out of snapshots and extrapolates, and everyone else sees that
-player warp. Each cvar was validated in isolation, so nothing ever compared
-them.
+These two are worth watching because the engine does not treat them as
+preferences. In `SV_UserinfoChanged`, `rate` becomes `cl->netchan.rate` (clamped
+to `MIN_RATE`/`MAX_RATE`) and `cl_updaterate` becomes `cl->next_messageinterval`
+(with only a floor of 10 applied on this path). They are the client's bandwidth
+cap and packet cadence, which is exactly what a `choke`/`drops` investigation
+needs correlated against.
 
 A once-per-map `NETOBS_SAMPLER_OK` liveness line ships for the same reason
 7.33's does: silence from an exceptions-only check is indistinguishable from
 silence from a check that is not running.
 
+### Not included — the paired ex_interp check, and why
+
+An earlier draft of this version added `NETOBS_INTERP_LOW`, warning when
+`ex_interp` was below `1/cl_updaterate`. It was removed before release for two
+independent reasons, recorded here so it is not re-attempted the same way:
+
+- **`ex_interp` is not a transmitted userinfo field.** The engine's
+  `g_info_important_fields` table (`rehlds/engine/info.cpp`) is exactly `name`,
+  `model`, `topcolor`, `bottomcolor`, `rate`, `cl_updaterate`, `cl_lw`, `cl_lc`,
+  `*hltv`, `*sid`, `_vgui_menus`. `get_user_info(id, "ex_interp", ...)` therefore
+  returns empty for every player, the guard would treat it as unset, and the
+  check would never have fired — a feature that looks shipped and does nothing.
+  Reading it requires the cvar query path, where it already lives as a monitored
+  range cvar.
+- **The behavioural claim was not ours to make.** The draft asserted that such a
+  client extrapolates. Whether the client clamps `ex_interp` up to the packet
+  interval internally is client-side behaviour, and the client is closed source —
+  we can observe the requested value but cannot verify what it does with it.
+
+The underlying observation still stands and is worth a follow-up: the enforced
+ranges are `cl_updaterate` 100-120 and `ex_interp` 0.009-0.05, so a client can
+satisfy both rules with a ratio that is inconsistent, because every cvar here is
+validated in isolation and nothing compares two of them.
+
 ### Notes
 
 An absent userinfo key parses as `0`, and `0` here would read as a real and
 alarming value rather than "not supplied", so the reader returns false on an
-absent `rate`/`cl_updaterate` and treats an absent `ex_interp` as "skip the
-interp comparison" rather than as zero. This is the same trap 7.33 documented.
+absent `rate`/`cl_updaterate` rather than caching a zero. Same trap 7.33
+documented.
 
 No enforced value, range, or tier changed. The monitored set is still 37, still
 15 priority + 22 standard.
