@@ -490,13 +490,19 @@ new gp_cvar_silent_tier_secs
 // player writes no line (per-player connect logging was removed in 7.21 over
 // disk-write volume).
 #define LAGCOMP_UNKNOWN -1
-// Netcode observation (v7.34). Absent-vs-zero is the whole hazard here: an
-// absent userinfo key parses as 0, and 0 would read as "extrapolating badly".
+// Netcode observation (v7.34). Initial value for the cached netcode reads.
+// It is NOT a gate and must never be compared against: cl_updaterate is
+// str_to_num of an attacker-settable userinfo string, so `setinfo
+// cl_updaterate -1` reproduces this value exactly and any `== NETOBS_UNKNOWN`
+// test would let a player switch their own observation off. Use
+// gb_netobsSampled. (LAGCOMP_UNKNOWN can gate safely only because
+// fn_lagcomp_read returns 0..3 and can never collide.)
 #define NETOBS_UNKNOWN -1
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
-new gi_netRate[MAX_PLAYERS + 1]        // NETOBS_UNKNOWN until sampled
-new gi_netUpdaterate[MAX_PLAYERS + 1]  // NETOBS_UNKNOWN until sampled
+new gi_netRate[MAX_PLAYERS + 1]        // cache only -- never gate on its value
+new gi_netUpdaterate[MAX_PLAYERS + 1]  // cache only -- never gate on its value
+new bool:gb_netobsSampled[MAX_PLAYERS + 1]
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
 // globals survive the changelevel — a name compare stays silent for exactly
@@ -565,6 +571,7 @@ public plugin_init() {
 		gi_lagcompState[i] = LAGCOMP_UNKNOWN
 		gi_netRate[i] = NETOBS_UNKNOWN
 		gi_netUpdaterate[i] = NETOBS_UNKNOWN
+		gb_netobsSampled[i] = false
 	}
 	gb_lagcompHeartbeatDone = false
 	gb_netobsHeartbeatDone = false
@@ -721,6 +728,7 @@ public client_putinserver(id) {
 	gi_lagcompState[id] = LAGCOMP_UNKNOWN
 	gi_netRate[id] = NETOBS_UNKNOWN
 	gi_netUpdaterate[id] = NETOBS_UNKNOWN
+	gb_netobsSampled[id] = false
 
 	if (is_user_bot(id) || is_user_hltv(id))
 		return
@@ -792,6 +800,7 @@ public client_disconnected(id) {
 	gi_lagcompState[id] = LAGCOMP_UNKNOWN
 	gi_netRate[id] = NETOBS_UNKNOWN
 	gi_netUpdaterate[id] = NETOBS_UNKNOWN
+	gb_netobsSampled[id] = false
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
 	if (g_discordPending[id]) {
@@ -1159,13 +1168,14 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 }
 
 // ============================================================================
-// NETCODE OBSERVATION (v7.34) — rate / cl_updaterate / ex_interp, log-only
+// NETCODE OBSERVATION (v7.34) — rate / cl_updaterate, log-only
 // ============================================================================
 
-// Reads the two netcode keys the engine itself parses out of userinfo. These
-// are not incidental: `rate` becomes cl->netchan.rate and `cl_updaterate`
-// becomes cl->next_messageinterval, so they ARE the client's bandwidth cap and
-// packet cadence. Returns false when a key is ABSENT -- str_to_num("") is 0, and
+// Reads the two netcode keys the engine parses out of userinfo. These are the
+// values the client REQUESTS: the engine clamps rate into MIN_RATE/MAX_RATE and
+// floors cl_updaterate at 10 before they become cl->netchan.rate and
+// cl->next_messageinterval, so a logged value is the request, not the grant.
+// Returns false when a key is ABSENT -- str_to_num("") is 0, and
 // a 0 here would read as a real and alarming value rather than "not supplied".
 // ex_interp is deliberately not read here: it is NOT a transmitted userinfo
 // field (engine info.cpp g_info_important_fields), so get_user_info returns
@@ -1205,6 +1215,7 @@ stock fn_netobs_sample(id) {
 
 	gi_netRate[id] = rate
 	gi_netUpdaterate[id] = updaterate
+	gb_netobsSampled[id] = true
 
 	if (!gb_netobsHeartbeatDone) {
 		gb_netobsHeartbeatDone = true
@@ -1235,8 +1246,12 @@ public client_infochanged(id) {
 
 	// Netcode keys ride the same forward: a mid-session rate/updaterate edit is
 	// exactly what the query rotation would take up to a full cycle to notice.
-	if (gi_netUpdaterate[id] == NETOBS_UNKNOWN)
+	// Retry rather than return -- a read that failed at settle would otherwise
+	// disable this slot for the whole session, silently.
+	if (!gb_netobsSampled[id]) {
+		fn_netobs_sample(id)
 		return
+	}
 
 	new rate, updaterate
 	if (!fn_netobs_read(id, rate, updaterate))
