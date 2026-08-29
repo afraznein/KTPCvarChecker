@@ -38,6 +38,81 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.34] - 2026-08-29
+
+### Added — netcode observation (log-only, nothing new enforced)
+
+`rate` and `cl_updaterate` are now read from userinfo alongside the 7.33
+`cl_lc`/`cl_lw` sample, and a mid-session edit to either logs `NETOBS_CHANGED`
+off the same `client_infochanged` forward. The query rotation would eventually
+notice, but only after up to a full cycle; the userinfo path is instant and
+costs no queries.
+
+These two are worth watching because the engine consumes them directly. In
+`SV_UserinfoChanged`, `rate` sets `cl->netchan.rate` and `cl_updaterate` sets
+`cl->next_messageinterval` — the client's bandwidth cap and packet cadence,
+which is what a `choke`/`drops` investigation needs to correlate against.
+
+What gets logged is the **requested** value, not the granted one: `rate` is
+clamped into `MIN_RATE`/`MAX_RATE` and `cl_updaterate` is floored at 10 before
+either takes effect. A logged value outside those bounds is a real fact about
+what the client asked for, and not what the server gave it.
+
+A once-per-map `NETOBS_SAMPLER_OK` liveness line ships for the same reason
+7.33's does: silence from an exceptions-only check is indistinguishable from
+silence from a check that is not running.
+
+### Not included — the paired ex_interp check, and why
+
+An earlier draft of this version added `NETOBS_INTERP_LOW`, warning when
+`ex_interp` was below `1/cl_updaterate`. It was removed before release for two
+independent reasons, recorded here so it is not re-attempted the same way:
+
+- **`ex_interp` is not a transmitted userinfo field.** The engine's
+  `g_info_important_fields` table (`rehlds/engine/info.cpp`) is exactly `name`,
+  `model`, `topcolor`, `bottomcolor`, `rate`, `cl_updaterate`, `cl_lw`, `cl_lc`,
+  `*hltv`, `*sid`, `_vgui_menus`. `get_user_info(id, "ex_interp", ...)` therefore
+  returns empty for every player, the guard would treat it as unset, and the
+  check would never have fired — a feature that looks shipped and does nothing.
+  Reading it requires the cvar query path, where it already lives as a monitored
+  range cvar.
+- **The behavioural claim was unsupported.** The draft asserted that such a
+  client extrapolates. `RESEARCH_NOTES.md` and
+  `KTPInfrastructure/docs/netcode/CVAR_RECOMMENDATIONS_1000TICK.md` both already
+  record that game clients control `ex_interp` entirely client-side with no
+  server-imposed floor or ceiling, and that the one buffer formula in the tree
+  (`1/updaterate + 0.05`) belongs to HLTV proxy code stuffing a value at
+  spectators — which says nothing about game clients.
+
+The underlying observation still stands and is worth a follow-up: the enforced
+ranges are `cl_updaterate` 100-120 and `ex_interp` 0.009-0.05, so a client can
+satisfy both rules with a ratio that is inconsistent, because every cvar here is
+validated in isolation and nothing compares two of them.
+
+### Notes
+
+The sampled-yet-or-not gate is a `bool`, deliberately, and the sentinel on the
+cached ints must never be compared against. `cl_updaterate` is `str_to_num` of a
+client-settable userinfo string, so `setinfo cl_updaterate -1` reproduces any
+negative sentinel exactly — a value gate would let a player switch their own
+observation off, silently, for a whole session. `LAGCOMP_UNKNOWN` gates safely
+only because `fn_lagcomp_read` can return nothing but 0..3.
+
+A sample that fails at settle retries on the next userinfo edit rather than
+dead-ending, so a slot cannot be left permanently unobserved by one bad read.
+
+Known limitation: enforcement corrections to `rate`/`cl_updaterate` also change
+userinfo, so a `NETOBS_CHANGED` line is not by itself proof the player initiated
+the change.
+
+An absent userinfo key parses as `0`, and `0` here would read as a real and
+alarming value rather than "not supplied", so the reader returns false on an
+absent `rate`/`cl_updaterate` rather than caching a zero. Same trap 7.33
+documented.
+
+No enforced value, range, or tier changed. The monitored set is still 37, still
+15 priority + 22 standard.
+
 ## [7.33] - 2026-08-26
 
 ### Added

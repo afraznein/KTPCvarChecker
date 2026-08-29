@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.33** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.34** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
 Pure enforcement anti-cheat that monitors 37 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
@@ -41,6 +41,7 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 - **Silent-client tripwire** — A client answering no cvar queries at all trips an audit alert after ~69s of total silence, and a client selectively blocking one rotation TIER (e.g. only the 0.3s visual tier) trips a tier-silence alert after ~90s (v7.29). Both alert-only, never a kick. Remaining residual: blocking a single cvar NAME while answering the rest of its tier is not individually tracked (per-name staleness counters if that class ever appears)
 - **Dynamic hud_takesshots** — Only enforced during competitive matches (`.ktp`, `.ktpOT`)
 - **Lag-comp flag observation (v7.33)** — `cl_lc`/`cl_lw` are read from userinfo (never queried, never enforced — the v7.25 permitting decision stands) and logged only on exception or transition: `LAGCOMP_OFF`, `LAGCOMP_CHANGED`, plus a once-per-map-load `LAGCOMP_SAMPLER_OK` liveness line. The engine skips lag compensation entirely when either flag is 0 — and an absent userinfo key reads as 0 — so an affected player must lead by their full ping; the log makes that population visible without re-enforcing
+- **Netcode observation (v7.34)** — `rate` and `cl_updaterate` are read from userinfo (never queried, never enforced) and logged on change as `NETOBS_CHANGED`, with a once-per-map `NETOBS_SAMPLER_OK` liveness line. The engine assigns these to `cl->netchan.rate` and `cl->next_messageinterval` — the client's bandwidth cap and packet cadence. The logged value is what the client **requested**; the engine clamps `rate` and floors `cl_updaterate` at 10 before either applies. Note `ex_interp` cannot be observed this way: it is not a transmitted userinfo field, so it is reachable only via the cvar query path where it is already monitored
 - **Manual check** — `/cvar` (say or say_team) triggers a full 37-cvar sweep, priority-first (~12.1s)
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 

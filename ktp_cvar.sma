@@ -6,6 +6,17 @@
  *   Release Date:      2026-08-26
  *
  *   Changelog:
+ *   7.34 2026-08-29 - Observe rate/cl_updaterate from userinfo (log-only,
+ *                      nothing new enforced). These two are not incidental
+ *                      settings: the engine assigns rate to cl->netchan.rate and
+ *                      cl_updaterate to cl->next_messageinterval, so they ARE the
+ *                      client's bandwidth cap and packet cadence. Zero added
+ *                      queries -- same userinfo path 7.33 uses for cl_lc/cl_lw,
+ *                      and a mid-session edit logs immediately instead of waiting
+ *                      up to a full rotation cycle.
+ *                      NOTE: ex_interp is NOT a transmitted userinfo field, so it
+ *                      cannot be read this way; a paired interp check needs the
+ *                      query path and is deliberately left out of this version.
  *   7.33 2026-08-26 - Observe cl_lc/cl_lw (log-only — the v7.25 enforcement removal
  *                      stands). SV_SetupMove skips lag compensation entirely when
  *                      either flag is 0, and an ABSENT userinfo key parses as 0, so
@@ -198,7 +209,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.33"
+#define PLUGIN_VERSION "7.34"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -479,13 +490,25 @@ new gp_cvar_silent_tier_secs
 // player writes no line (per-player connect logging was removed in 7.21 over
 // disk-write volume).
 #define LAGCOMP_UNKNOWN -1
+// Netcode observation (v7.34). Initial value for the cached netcode reads.
+// It is NOT a gate and must never be compared against: cl_updaterate is
+// str_to_num of an attacker-settable userinfo string, so `setinfo
+// cl_updaterate -1` reproduces this value exactly and any `== NETOBS_UNKNOWN`
+// test would let a player switch their own observation off. Use
+// gb_netobsSampled. (LAGCOMP_UNKNOWN can gate safely only because
+// fn_lagcomp_read returns 0..3 and can never collide.)
+#define NETOBS_UNKNOWN -1
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
+new gi_netRate[MAX_PLAYERS + 1]        // cache only -- never gate on its value
+new gi_netUpdaterate[MAX_PLAYERS + 1]  // cache only -- never gate on its value
+new bool:gb_netobsSampled[MAX_PLAYERS + 1]
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
 // globals survive the changelevel — a name compare stays silent for exactly
 // the halves that matter. plugin_init re-fires per map change and resets it.
 new bool:gb_lagcompHeartbeatDone
+new bool:gb_netobsHeartbeatDone
 
 // ============================================================================
 // PLUGIN INITIALIZATION
@@ -544,9 +567,14 @@ public plugin_init() {
 	// the unknown sentinel must be set explicitly or an unsampled slot reads as
 	// the exact population this feature hunts. Re-fires per map change in
 	// extension mode; putinserver re-arms the sample for players who stay.
-	for (new i = 1; i <= MAX_PLAYERS; i++)
+	for (new i = 1; i <= MAX_PLAYERS; i++) {
 		gi_lagcompState[i] = LAGCOMP_UNKNOWN
+		gi_netRate[i] = NETOBS_UNKNOWN
+		gi_netUpdaterate[i] = NETOBS_UNKNOWN
+		gb_netobsSampled[i] = false
+	}
 	gb_lagcompHeartbeatDone = false
+	gb_netobsHeartbeatDone = false
 
 	// Discord webhook logging now uses shared ktp_discord.inc
 
@@ -698,6 +726,9 @@ public client_putinserver(id) {
 	// the HLTV proxy DOES reach that forward (KTPAMXX excludes only
 	// FL_FAKECLIENT), and a recycled slot must not inherit a sampled state
 	gi_lagcompState[id] = LAGCOMP_UNKNOWN
+	gi_netRate[id] = NETOBS_UNKNOWN
+	gi_netUpdaterate[id] = NETOBS_UNKNOWN
+	gb_netobsSampled[id] = false
 
 	if (is_user_bot(id) || is_user_hltv(id))
 		return
@@ -767,6 +798,9 @@ public client_disconnected(id) {
 	gb_silentAlerted[id] = false
 	gb_queryJustHandled[id] = false
 	gi_lagcompState[id] = LAGCOMP_UNKNOWN
+	gi_netRate[id] = NETOBS_UNKNOWN
+	gi_netUpdaterate[id] = NETOBS_UNKNOWN
+	gb_netobsSampled[id] = false
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
 	if (g_discordPending[id]) {
@@ -899,6 +933,7 @@ public fn_start_monitoring(id) {
 	// One-shot cl_lc/cl_lw read now that the player has settled (userinfo is
 	// long since parsed by this point); client_infochanged catches later flips
 	fn_lagcomp_sample(id)
+	fn_netobs_sample(id)
 }
 
 /**
@@ -1132,6 +1167,66 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 	}
 }
 
+// ============================================================================
+// NETCODE OBSERVATION (v7.34) — rate / cl_updaterate, log-only
+// ============================================================================
+
+// Reads the two netcode keys the engine parses out of userinfo. These are the
+// values the client REQUESTS: the engine clamps rate into MIN_RATE/MAX_RATE and
+// floors cl_updaterate at 10 before they become cl->netchan.rate and
+// cl->next_messageinterval, so a logged value is the request, not the grant.
+// Returns false when a key is ABSENT -- str_to_num("") is 0, and
+// a 0 here would read as a real and alarming value rather than "not supplied".
+// ex_interp is deliberately not read here: it is NOT a transmitted userinfo
+// field (engine info.cpp g_info_important_fields), so get_user_info returns
+// empty for it on every player.
+stock bool:fn_netobs_read(id, &rate, &updaterate) {
+	new buf[16]
+
+	get_user_info(id, "rate", buf, charsmax(buf))
+	if (buf[0] == EOS)
+		return false
+	rate = str_to_num(buf)
+
+	get_user_info(id, "cl_updaterate", buf, charsmax(buf))
+	if (buf[0] == EOS)
+		return false
+	updaterate = str_to_num(buf)
+
+	return true
+}
+
+stock fn_netobs_log(id, const event[], const detail[]) {
+	get_user_name(id, gs_logname, charsmax(gs_logname))
+	get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+	get_user_ip(id, gs_logip, charsmax(gs_logip), 1)
+
+	log_amx("[%s] event=%s sid=%s name=%s ip=%s %s",
+		PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip, detail)
+}
+
+// One-shot at monitoring start, same settle point as the lag-comp sample. The
+// heartbeat exists for the same reason that one does: silence from an
+// exceptions-only check is indistinguishable from silence from a broken check.
+stock fn_netobs_sample(id) {
+	new rate, updaterate
+	if (!fn_netobs_read(id, rate, updaterate))
+		return
+
+	gi_netRate[id] = rate
+	gi_netUpdaterate[id] = updaterate
+	gb_netobsSampled[id] = true
+
+	if (!gb_netobsHeartbeatDone) {
+		gb_netobsHeartbeatDone = true
+		new map[32]
+		get_mapname(map, charsmax(map))
+		get_user_authid(id, gs_logauthid, charsmax(gs_logauthid))
+		log_amx("[%s] event=NETOBS_SAMPLER_OK map=%s sid=%s rate=%d updaterate=%d",
+			PLUGIN_NAME, map, gs_logauthid, rate, updaterate)
+	}
+}
+
 // Fires on every userinfo edit — name changes are the common case — so compare
 // against the cached state and only a real flip logs. Unsampled players
 // (still loading, bots, HLTV) stay at LAGCOMP_UNKNOWN and return early.
@@ -1142,13 +1237,35 @@ public client_infochanged(id) {
 		return
 
 	new flags = fn_lagcomp_read(id)
-	if (flags == gi_lagcompState[id])
+	if (flags != gi_lagcompState[id]) {
+		new prev = gi_lagcompState[id]
+		gi_lagcompState[id] = flags
+		// A flip back to 1/1 logs too — the transition is the signal
+		fn_lagcomp_log(id, "LAGCOMP_CHANGED", flags, prev)
+	}
+
+	// Netcode keys ride the same forward: a mid-session rate/updaterate edit is
+	// exactly what the query rotation would take up to a full cycle to notice.
+	// Retry rather than return -- a read that failed at settle would otherwise
+	// disable this slot for the whole session, silently.
+	if (!gb_netobsSampled[id]) {
+		fn_netobs_sample(id)
+		return
+	}
+
+	new rate, updaterate
+	if (!fn_netobs_read(id, rate, updaterate))
+		return
+	if (rate == gi_netRate[id] && updaterate == gi_netUpdaterate[id])
 		return
 
-	new prev = gi_lagcompState[id]
-	gi_lagcompState[id] = flags
-	// A flip back to 1/1 logs too — the transition is the signal
-	fn_lagcomp_log(id, "LAGCOMP_CHANGED", flags, prev)
+	new detail[128]
+	formatex(detail, charsmax(detail),
+		"rate=%d updaterate=%d prev_rate=%d prev_updaterate=%d",
+		rate, updaterate, gi_netRate[id], gi_netUpdaterate[id])
+	gi_netRate[id] = rate
+	gi_netUpdaterate[id] = updaterate
+	fn_netobs_log(id, "NETOBS_CHANGED", detail)
 }
 
 // ============================================================================
