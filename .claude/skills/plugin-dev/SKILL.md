@@ -143,8 +143,9 @@ out to the scratch dir over running tools "in place".
 
 ## Workflow
 1. **Version bump** (every shipped change): `#define PLUGIN_VERSION` in
-   `ktp_cvar.sma`, new `CHANGELOG.md` section, README version header + the
-   monitored-cvar count table if the tier lists changed.
+   `ktp_cvar.sma` AND the header comment's `Current Version:` / `Release Date:`
+   lines (they drifted apart at 7.35), new `CHANGELOG.md` section, README
+   version header + the monitored-cvar count table if the tier lists changed.
 2. **Compile**: `wsl bash -c "cd '/mnt/n/Nein_/KTP Git Projects/KTPCvarChecker' && bash compile.sh"`
    (outputs `compiled/ktp_cvar.amxx`, auto-stages to the KTP DoD Server test tree).
 3. **Review**: `ktp-code-review` agent before any fleet stage.
