@@ -100,9 +100,21 @@ defensible enforced value. The v7.25 enforcement boundary is unchanged — this
 observes what players run without making them run something.
 
 They use their own query callback rather than `fn_querycvar`, so non-enforced
-values never touch the path that validates and corrects, and they are not counted
-by `fn_note_query_sent` — the silent-client tripwire stays keyed on enforcement
-queries, so an unanswered observation can never contribute to a kick.
+values never touch the path that validates and corrects.
+
+Their effect on the silent-client tripwire is asymmetric, and both directions are
+worth stating. **Send side:** they are not counted by `fn_note_query_sent`, so an
+unanswered observation never counts against a client — it cannot contribute to an
+alert. **Response side:** it is not isolated. `client_cvar_changed` calls
+`fn_note_response` unconditionally before the dedup mark is read, so an observe
+response resets the global unanswered counter, and during a silence stretch also
+both tier counters. The plugin cannot suppress that from its own callback.
+
+The practical effect is bounded: a client answering these but no enforcement
+queries gets its counters zeroed three times at settle, then the queries stop —
+they are one-shot — and both counters re-accumulate on the rotations. It delays a
+silence alert by at most roughly a minute, once per map, and is not a durable
+bypass. (Both tripwires are alert-only; neither kicks.)
 
 ### Notes
 

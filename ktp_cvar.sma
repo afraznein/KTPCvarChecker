@@ -1204,7 +1204,10 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 }
 
 // ============================================================================
-// NETCODE OBSERVATION (v7.34) — rate / cl_updaterate, log-only
+// NETCODE OBSERVATION (v7.34) — log-only, enforces nothing.
+//   * rate / cl_updaterate sampled from userinfo at settle, changes logged
+//   * ex_interp vs 1/cl_updaterate pairing, fed by the existing query rotation
+//   * cl_nopred / cl_cmdbackup / cl_nodelta queried once, outside gs_cvars
 // ============================================================================
 
 // Reads the two netcode keys the engine parses out of userinfo. These are the
