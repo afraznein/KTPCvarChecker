@@ -6,6 +6,13 @@
  *   Release Date:      2026-08-26
  *
  *   Changelog:
+ *   7.35 2026-08-29 - Add the ex_interp/cl_updaterate pairing check on the
+ *                      QUERY path (ex_interp is already monitored and already
+ *                      priority, so this costs no new queries -- 7.34 reached
+ *                      for userinfo, where the key does not exist). Transitions
+ *                      only. Adds cl_nopred/cl_cmdbackup/cl_nodelta as
+ *                      observe-only, held outside gs_cvars so they are never
+ *                      enforced.
  *   7.34 2026-08-29 - Observe rate/cl_updaterate from userinfo (log-only,
  *                      nothing new enforced). These two are not incidental
  *                      settings: the engine assigns rate to cl->netchan.rate and
@@ -209,7 +216,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.34"
+#define PLUGIN_VERSION "7.35"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -1204,7 +1211,7 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 }
 
 // ============================================================================
-// NETCODE OBSERVATION (v7.34) — log-only, enforces nothing.
+// NETCODE OBSERVATION (v7.34/7.35) — log-only, enforces nothing.
 //   * rate / cl_updaterate sampled from userinfo at settle, changes logged
 //   * ex_interp vs 1/cl_updaterate pairing, fed by the existing query rotation
 //   * cl_nopred / cl_cmdbackup / cl_nodelta queried once, outside gs_cvars
