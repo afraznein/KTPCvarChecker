@@ -498,11 +498,25 @@ new gp_cvar_silent_tier_secs
 // gb_netobsSampled. (LAGCOMP_UNKNOWN can gate safely only because
 // fn_lagcomp_read returns 0..3 and can never collide.)
 #define NETOBS_UNKNOWN -1
+// Guards float equality at the boundary (ex_interp 0.01 vs 1/100).
+#define INTERP_EPSILON 0.0001
+
+// Observe-only cvars (v7.34): queried once at settle, logged, NEVER enforced.
+// Kept OUT of gs_cvars deliberately -- everything in that array is validated
+// against gs_calvalues and corrected, and these have no defensible enforced
+// value. The point is to see what players run, not to make them run something.
+#define OBSERVE_CVARS_COUNT 3
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
 new gi_netRate[MAX_PLAYERS + 1]        // cache only -- never gate on its value
 new gi_netUpdaterate[MAX_PLAYERS + 1]  // cache only -- never gate on its value
 new bool:gb_netobsSampled[MAX_PLAYERS + 1]
+new Float:gf_netInterp[MAX_PLAYERS + 1]     // last ex_interp seen via the QUERY path
+new bool:gb_netInterpSeen[MAX_PLAYERS + 1]
+new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried ~4.5s
+new gi_exInterpIdx                           // derived; -1 if ex_interp leaves gs_cvars
+
+new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_nopred", "cl_cmdbackup", "cl_nodelta" }
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
 // globals survive the changelevel — a name compare stays silent for exactly
@@ -563,6 +577,21 @@ public plugin_init() {
 			PLUGIN_NAME, gi_standardCvarCount, TOTAL_CVARS - PRIORITY_CVARS_COUNT)
 	}
 
+	// Derived, not hardcoded: indices in gs_cvars have shifted on most tier edits
+	// (7.13, 7.24, 7.25, 7.30), and a stale constant would silently point the
+	// interp check at a different cvar rather than fail.
+	gi_exInterpIdx = -1
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		if (equal(gs_cvars[i], "ex_interp")) {
+			gi_exInterpIdx = i
+			break
+		}
+	}
+	if (gi_exInterpIdx == -1) {
+		log_amx("[%s] NETOBS: ex_interp not in gs_cvars -- interp pairing check is INERT",
+			PLUGIN_NAME)
+	}
+
 	// Globals load as 0, and 0 is a VALID sampled lagcomp state (lc=0, lw=0) —
 	// the unknown sentinel must be set explicitly or an unsampled slot reads as
 	// the exact population this feature hunts. Re-fires per map change in
@@ -572,6 +601,8 @@ public plugin_init() {
 		gi_netRate[i] = NETOBS_UNKNOWN
 		gi_netUpdaterate[i] = NETOBS_UNKNOWN
 		gb_netobsSampled[i] = false
+		gb_netInterpSeen[i] = false
+		gb_netInterpWarned[i] = false
 	}
 	gb_lagcompHeartbeatDone = false
 	gb_netobsHeartbeatDone = false
@@ -729,6 +760,8 @@ public client_putinserver(id) {
 	gi_netRate[id] = NETOBS_UNKNOWN
 	gi_netUpdaterate[id] = NETOBS_UNKNOWN
 	gb_netobsSampled[id] = false
+	gb_netInterpSeen[id] = false
+	gb_netInterpWarned[id] = false
 
 	if (is_user_bot(id) || is_user_hltv(id))
 		return
@@ -801,6 +834,8 @@ public client_disconnected(id) {
 	gi_netRate[id] = NETOBS_UNKNOWN
 	gi_netUpdaterate[id] = NETOBS_UNKNOWN
 	gb_netobsSampled[id] = false
+	gb_netInterpSeen[id] = false
+	gb_netInterpWarned[id] = false
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
 	if (g_discordPending[id]) {
@@ -934,6 +969,7 @@ public fn_start_monitoring(id) {
 	// long since parsed by this point); client_infochanged catches later flips
 	fn_lagcomp_sample(id)
 	fn_netobs_sample(id)
+	fn_netobs_query_observed(id)
 }
 
 /**
@@ -1205,6 +1241,67 @@ stock fn_netobs_log(id, const event[], const detail[]) {
 		PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip, detail)
 }
 
+// ex_interp under one packet interval leaves the client with no newer snapshot
+// to interpolate toward. Both cvars are enforced independently and both can sit
+// in range while the PAIR does not -- enforced ranges are cl_updaterate 100-120
+// and ex_interp 0.009-0.05, so 0.009 at updaterate 100 is under the 0.010
+// interval and still passes both rules. Nothing else in the plugin compares two
+// cvars, so this is the only place the pairing is visible.
+stock fn_netobs_eval_interp(id) {
+	if (!gb_netInterpSeen[id] || !gb_netobsSampled[id])
+		return
+
+	new updaterate = gi_netUpdaterate[id]
+	if (updaterate <= 0 || gf_netInterp[id] <= 0.0)
+		return
+
+	new Float:need = 1.0 / float(updaterate)
+	new bool:low = (gf_netInterp[id] < need - INTERP_EPSILON)
+
+	// ex_interp rides the ~4.5s priority rotation, so only TRANSITIONS log --
+	// otherwise one mis-set client writes ~13 lines a minute, forever.
+	if (low == gb_netInterpWarned[id])
+		return
+	gb_netInterpWarned[id] = low
+
+	new detail[112]
+	formatex(detail, charsmax(detail), "ex_interp=%.4f cl_updaterate=%d need=%.4f",
+		gf_netInterp[id], updaterate, need)
+	fn_netobs_log(id, low ? "NETOBS_INTERP_LOW" : "NETOBS_INTERP_OK", detail)
+}
+
+// Called from fn_checkaltallowed, which every range cvar already funnels through
+// on both the initial sweep and the rotation -- so this costs no extra query.
+stock fn_netobs_note_interp(id, Float:interp) {
+	gf_netInterp[id] = interp
+	gb_netInterpSeen[id] = true
+	fn_netobs_eval_interp(id)
+}
+
+// Separate from fn_querycvar on purpose: these cvars are not in the enforcement
+// trie, and routing them through the enforcement callback would put non-enforced
+// values on the path that validates and corrects.
+public fn_observecvar(id, const s_CVARNAME[], const s_VALUE[]) {
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id])
+		return
+
+	// The client_cvar_changed forward fires next for this same response; the mark
+	// keeps its bookkeeping consistent with the enforcement path.
+	gb_queryJustHandled[id] = true
+
+	new detail[80]
+	formatex(detail, charsmax(detail), "cvar=%s value=%s", s_CVARNAME, s_VALUE)
+	fn_netobs_log(id, "NETOBS_CVAR", detail)
+}
+
+// One-shot at settle. Deliberately NOT counted by fn_note_query_sent: the
+// silent-client tripwire must stay keyed on enforcement queries, or an
+// unanswered observation would contribute to a kick decision.
+stock fn_netobs_query_observed(id) {
+	for (new i = 0; i < OBSERVE_CVARS_COUNT; i++)
+		query_client_cvar(id, gs_observe_cvars[i], "fn_observecvar")
+}
+
 // One-shot at monitoring start, same settle point as the lag-comp sample. The
 // heartbeat exists for the same reason that one does: silence from an
 // exceptions-only check is indistinguishable from silence from a broken check.
@@ -1216,6 +1313,8 @@ stock fn_netobs_sample(id) {
 	gi_netRate[id] = rate
 	gi_netUpdaterate[id] = updaterate
 	gb_netobsSampled[id] = true
+	// updaterate is now known; an ex_interp seen before this point can be judged
+	fn_netobs_eval_interp(id)
 
 	if (!gb_netobsHeartbeatDone) {
 		gb_netobsHeartbeatDone = true
@@ -1266,6 +1365,9 @@ public client_infochanged(id) {
 	gi_netRate[id] = rate
 	gi_netUpdaterate[id] = updaterate
 	fn_netobs_log(id, "NETOBS_CHANGED", detail)
+
+	// updaterate moved, so the pairing verdict may have flipped
+	fn_netobs_eval_interp(id)
 }
 
 // ============================================================================
@@ -1297,6 +1399,10 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 }
 
 public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue, Float: altFloatValue, const s_VALUE[], const s_CALVALUE[]) {
+	// Observation only -- never gates or alters the enforcement below.
+	if (cvar_index == gi_exInterpIdx)
+		fn_netobs_note_interp(id, valueFromPlayer)
+
 	if (valueFromPlayer < calFloatValue) {
 		// Below minimum — correct to minimum
 		defer_enforcement(id, cvar_index, valueFromPlayer, calFloatValue)

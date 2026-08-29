@@ -62,32 +62,47 @@ A once-per-map `NETOBS_SAMPLER_OK` liveness line ships for the same reason
 7.33's does: silence from an exceptions-only check is indistinguishable from
 silence from a check that is not running.
 
-### Not included — the paired ex_interp check, and why
+### Added — the ex_interp / cl_updaterate pairing check
 
-An earlier draft of this version added `NETOBS_INTERP_LOW`, warning when
-`ex_interp` was below `1/cl_updaterate`. It was removed before release for two
-independent reasons, recorded here so it is not re-attempted the same way:
+`NETOBS_INTERP_LOW` fires when a client's `ex_interp` sits below one packet
+interval (`1/cl_updaterate`), leaving it with no newer snapshot to interpolate
+toward. `NETOBS_INTERP_OK` fires on recovery.
 
-- **`ex_interp` is not a transmitted userinfo field.** The engine's
-  `g_info_important_fields` table (`rehlds/engine/info.cpp`) is exactly `name`,
-  `model`, `topcolor`, `bottomcolor`, `rate`, `cl_updaterate`, `cl_lw`, `cl_lc`,
-  `*hltv`, `*sid`, `_vgui_menus`. `get_user_info(id, "ex_interp", ...)` therefore
-  returns empty for every player, the guard would treat it as unset, and the
-  check would never have fired — a feature that looks shipped and does nothing.
-  Reading it requires the cvar query path, where it already lives as a monitored
-  range cvar.
-- **The behavioural claim was unsupported.** The draft asserted that such a
-  client extrapolates. `RESEARCH_NOTES.md` and
-  `KTPInfrastructure/docs/netcode/CVAR_RECOMMENDATIONS_1000TICK.md` both already
-  record that game clients control `ex_interp` entirely client-side with no
-  server-imposed floor or ceiling, and that the one buffer formula in the tree
-  (`1/updaterate + 0.05`) belongs to HLTV proxy code stuffing a value at
-  spectators — which says nothing about game clients.
+This is the first check here that looks at a **relationship between two cvars**
+rather than at one cvar alone, and the gap is real: the enforced ranges are
+`cl_updaterate` 100-120 and `ex_interp` 0.009-0.05, so a client at updaterate 100
+with `ex_interp` 0.009 satisfies both rules while sitting under the 0.010
+interval. Every cvar here is validated in isolation, so nothing compared them.
 
-The underlying observation still stands and is worth a follow-up: the enforced
-ranges are `cl_updaterate` 100-120 and `ex_interp` 0.009-0.05, so a client can
-satisfy both rules with a ratio that is inconsistent, because every cvar here is
-validated in isolation and nothing compares two of them.
+**It costs no additional queries.** `ex_interp` is already a monitored range cvar
+and already a priority cvar, so it arrives on the initial sweep and refreshes on
+the ~4.5s priority rotation; the check hooks `fn_checkaltallowed`, which every
+range cvar already funnels through. Only transitions log — at rotation cadence an
+undebounced warning would write ~13 lines a minute per affected client, forever.
+
+Its index is derived from `gs_cvars` at init rather than hardcoded. Indices here
+have shifted on most tier edits (7.13, 7.24, 7.25, 7.30) and a stale constant
+would silently point the check at a different cvar; if `ex_interp` ever leaves
+`gs_cvars`, init logs that the check is inert instead of failing quietly.
+
+An earlier draft of this version read `ex_interp` from **userinfo**, where it does
+not exist — `g_info_important_fields` (`rehlds/engine/info.cpp`) is exactly
+`name, model, topcolor, bottomcolor, rate, cl_updaterate, cl_lw, cl_lc, *hltv,
+*sid, _vgui_menus`. `get_user_info` returned empty for every player and the check
+was unreachable. The query path is where this value has always lived.
+
+### Added — observe-only cvars
+
+`cl_nopred`, `cl_cmdbackup` and `cl_nodelta` are queried once at settle and logged
+as `NETOBS_CVAR`. They are held **outside** `gs_cvars` deliberately: everything in
+that array is validated against `gs_calvalues` and corrected, and these have no
+defensible enforced value. The v7.25 enforcement boundary is unchanged — this
+observes what players run without making them run something.
+
+They use their own query callback rather than `fn_querycvar`, so non-enforced
+values never touch the path that validates and corrects, and they are not counted
+by `fn_note_query_sent` — the silent-client tripwire stays keyed on enforcement
+queries, so an unanswered observation can never contribute to a kick.
 
 ### Notes
 
