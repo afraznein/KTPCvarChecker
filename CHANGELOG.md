@@ -38,6 +38,39 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.34] - 2026-08-29
+
+### Added — netcode observation (log-only, nothing new enforced)
+
+`rate` and `cl_updaterate` are now read from userinfo alongside the 7.33
+`cl_lc`/`cl_lw` sample, and a mid-session edit to either logs `NETOBS_CHANGED`
+off the same `client_infochanged` forward. The query rotation would eventually
+notice, but only after up to a full cycle; the userinfo path is instant, costs
+no queries, and reads the same string the engine itself parses.
+
+Also adds `NETOBS_INTERP_LOW`, which is the first check in this plugin that
+looks at a **relationship between two cvars** rather than at one cvar alone.
+That gap was real: the enforced ranges are `cl_updaterate` 100-120 and
+`ex_interp` 0.009-0.05, so a client at `cl_updaterate 100` with `ex_interp
+0.009` passes both rules while sitting under the 0.010 packet interval — which
+means it runs out of snapshots and extrapolates, and everyone else sees that
+player warp. Each cvar was validated in isolation, so nothing ever compared
+them.
+
+A once-per-map `NETOBS_SAMPLER_OK` liveness line ships for the same reason
+7.33's does: silence from an exceptions-only check is indistinguishable from
+silence from a check that is not running.
+
+### Notes
+
+An absent userinfo key parses as `0`, and `0` here would read as a real and
+alarming value rather than "not supplied", so the reader returns false on an
+absent `rate`/`cl_updaterate` and treats an absent `ex_interp` as "skip the
+interp comparison" rather than as zero. This is the same trap 7.33 documented.
+
+No enforced value, range, or tier changed. The monitored set is still 37, still
+15 priority + 22 standard.
+
 ## [7.33] - 2026-08-26
 
 ### Added
