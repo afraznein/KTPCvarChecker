@@ -38,6 +38,68 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.35] - 2026-08-29
+
+### Added — the ex_interp / cl_updaterate pairing check
+
+`NETOBS_INTERP_LOW` fires when a client's `ex_interp` sits below one packet
+interval (`1/cl_updaterate`), leaving it with no newer snapshot to interpolate
+toward. `NETOBS_INTERP_OK` fires on recovery.
+
+This is the first check here that looks at a **relationship between two cvars**
+rather than at one cvar alone, and the gap is real: enforced ranges are
+`cl_updaterate` 100-120 and `ex_interp` 0.009-0.05, so a client at updaterate 100
+with `ex_interp` 0.009 satisfies both rules while sitting under the 0.010
+interval. Every cvar here is validated in isolation, so nothing compared them.
+
+**It costs no additional queries.** 7.34 tried to read `ex_interp` from userinfo,
+where it does not exist. It has always been reachable on the *query* path: it is
+already a monitored range cvar and already a priority cvar, so it arrives on the
+initial sweep and refreshes on the ~4.5s priority rotation. The check hooks
+`fn_checkaltallowed`, which every range cvar already funnels through.
+
+Only transitions log — at rotation cadence an undebounced warning would write
+~13 lines a minute per affected client, forever.
+
+The index is derived from `gs_cvars` at init rather than hardcoded. Indices here
+have shifted on most tier edits (7.13, 7.24, 7.25, 7.30) and a stale constant
+would silently point the check at a different cvar; if `ex_interp` ever leaves
+`gs_cvars`, init logs that the check is inert instead of failing quietly.
+
+### Added — observe-only cvars
+
+`cl_nopred`, `cl_cmdbackup` and `cl_nodelta` are queried once at settle and logged
+as `NETOBS_CVAR`. They are held **outside** `gs_cvars` deliberately: everything in
+that array is validated against `gs_calvalues` and corrected, and these have no
+defensible enforced value. The v7.25 enforcement boundary is unchanged — this
+observes what players run without making them run something.
+
+They use their own query callback rather than `fn_querycvar`, so non-enforced
+values never touch the path that validates and corrects.
+
+Their effect on the silent-client tripwire is asymmetric, and both directions are
+worth stating. **Send side:** they are not counted by `fn_note_query_sent`, so an
+unanswered observation never counts against a client. **Response side:** it is not
+isolated. `client_cvar_changed` calls `fn_note_response` unconditionally before
+the dedup mark is read, so an observe response resets the global unanswered
+counter, and during a silence stretch also both tier counters. The plugin cannot
+suppress that from its own callback.
+
+The practical effect is bounded: a client answering these but no enforcement
+queries gets its counters zeroed three times at settle, then the queries stop —
+they are one-shot — and both counters re-accumulate on the rotations. It delays a
+silence alert by at most roughly a minute, once per map, and is not a durable
+bypass. (Both tripwires are alert-only; neither kicks.)
+
+### Known follow-ups
+
+`need` divides by the **requested** updaterate. The engine clamps the effective
+interval to `[1/sv_maxupdaterate, 1/sv_minupdaterate]`; inside the enforced
+100-120 range these coincide, but a client at `cl_updaterate 200` with `ex_interp
+0.006` logs nothing while its effective interval is genuinely below one packet.
+`INTERP_EPSILON` at `1e-4` also leaves a sub-0.1ms blind band that `1e-6` would
+close.
+
 ## [7.34] - 2026-08-29
 
 ### Added — netcode observation (log-only, nothing new enforced)
