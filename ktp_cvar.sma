@@ -2,8 +2,8 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.33
- *   Release Date:      2026-08-26
+ *   Current Version:   7.35
+ *   Release Date:      2026-08-29
  *
  *   Changelog:
  *   7.35 2026-08-29 - Add the ex_interp/cl_updaterate pairing check on the
