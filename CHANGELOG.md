@@ -38,6 +38,72 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.36] - 2026-08-30
+
+### Fixed — zero userinfo reads inside `client_infochanged` (fleet name-corruption mitigation)
+
+`client_infochanged` made four found `get_user_info()` reads (`cl_lc`, `cl_lw`,
+`rate`, `cl_updaterate`). KTPAMXX core executes the forward while it still holds
+a pointer to the player's name inside KTP-ReHLDS's 4-slot rotating info-value
+buffer (`INFO_MAX_BUFFER_VALUES = 4`; with REHLDS_FIXES the rotation advances
+only on a FOUND key), and copies from that pointer into its per-player name
+cache only after the forward returns. The name read takes one slot; it survives
+only if at most 3 further found reads happen before the copy — counting
+subsequent found reads across ALL plugins running the forward, per event, which
+is the convention every count below uses. `admin.sma` reads
+`name` first in the same forward, so 7.33's three reads sat exactly at the
+boundary — a player carrying `setinfo _pw` (one more found read in admin.sma's
+access check) could still corrupt — and 7.34/7.35's `rate`/`cl_updaterate`
+reads crossed it for everyone: the 4th subsequent read (`rate`) recycled the
+name's slot, and every `get_user_name()` consumer (match HUD, HudObserver's
+feed, ktpleague.gg/servers) saw the player's name as their own rate, `100000`
+or `100000.000000`. Engine/scoreboard names were never affected — only AMXX's
+name cache.
+
+The forward now performs **zero** userinfo reads: it validates the slot against
+cached state and sets a per-player dirty flag. The existing priority rotation
+task (repeating, 0.3s, already running for every monitored player) consumes the
+flag and runs the old body — lagcomp transition diff, the netobs settle-retry,
+the rate/updaterate diff, the interp re-eval — outside the forward, where no
+stale buffer pointer is held. This also closes the residual 7.33 carried: a
+`_pw`-carrying player's rename can no longer wrap the buffer via this plugin at
+all.
+
+Design notes:
+
+- **`afraznein/KTPAMXX`#84 (core copies the name out of the rotating buffer
+  before running the forward) is the permanent close for this corruption
+  class** — it protects every plugin's reads, where 7.36 only takes this
+  plugin's reads out of the shared per-event budget; any other plugin adding a
+  `client_infochanged` read re-opens the class on a pre-#84 core. After the
+  core wave, 7.36 remains as defence-in-depth and as cover for hosts still on
+  an older core — do not revert the deferral because the core fix landed.
+- **No new task, so nothing for the extension-mode activation clear to wipe.**
+  `KTPAMX_ReloadPlugins` clears the task manager after forwards run and before
+  `plugin_cfg` — a one-shot `set_task` armed from a forward can vanish
+  silently, losing the deferred sample. The carrier here is the already-armed
+  repeating rotation task; the pending sample is a plain per-player bool that
+  persists until a tick consumes it. If the rotation tasks themselves are ever
+  wiped, the plugin's whole per-player state (cached baselines included) resets
+  with them — there is no partial-loss mode where a baseline survives but the
+  pending sample does not.
+- **Disconnect race:** `client_disconnected` clears the flag and sets the stop
+  sentinel; the rotation handler additionally gates on `is_user_connected`. A
+  slot recycled before the next tick has the flag cleared in
+  `client_putinserver`, so a sample can never cross players.
+- **Re-change race:** the flag is level-triggered — the deferred read sees
+  current userinfo, so multiple edits inside one 0.3s tick coalesce into one
+  diff against the cached baseline. A value that flips and reverts within a
+  tick logs nothing; any transition that persists still logs (the transition is
+  the signal, including a flip back to 1/1).
+- The settle-retry semantics are preserved verbatim: a netobs read that failed
+  at settle is retried on the next consumed change instead of silently
+  disabling the slot for the session.
+
+No enforcement change, no new queries, no new cvars. Observation latency for
+`LAGCOMP_CHANGED`/`NETOBS_CHANGED` moves from immediate to at most one 0.3s
+rotation tick.
+
 ## [7.35] - 2026-08-29
 
 ### Added — the ex_interp / cl_updaterate pairing check

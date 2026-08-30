@@ -2,10 +2,26 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.35
- *   Release Date:      2026-08-29
+ *   Current Version:   7.36
+ *   Release Date:      2026-08-30
  *
  *   Changelog:
+ *   7.36 2026-08-30 - client_infochanged now makes ZERO userinfo reads. Core
+ *                      executes the forward while holding a pointer to the
+ *                      player's name inside KTP-ReHLDS's 4-slot rotating
+ *                      info-value buffer, then caches from that pointer after
+ *                      the forward returns; every found get_user_info() in
+ *                      between advances the rotation, and once enough plugins
+ *                      read (admin.sma's name read plus this plugin's four as
+ *                      of 7.35) the name slot is recycled — players' cached
+ *                      names became their own rate ("100000"). The forward now
+ *                      only marks the slot dirty; the priority rotation task
+ *                      consumes the flag and samples userinfo outside the
+ *                      forward, within one 0.3s tick. KTPAMXX#84 (core copies
+ *                      the name before the forward) is the permanent close for
+ *                      the class; 7.36 keeps this plugin out of the shared
+ *                      read budget on pre-#84 cores and stays as
+ *                      defence-in-depth after the core waves.
  *   7.35 2026-08-29 - Add the ex_interp/cl_updaterate pairing check on the
  *                      QUERY path (ex_interp is already monitored and already
  *                      priority, so this costs no new queries -- 7.34 reached
@@ -216,7 +232,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.35"
+#define PLUGIN_VERSION "7.36"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -523,6 +539,13 @@ new bool:gb_netInterpSeen[MAX_PLAYERS + 1]
 new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried ~4.5s
 new gi_exInterpIdx                           // derived; -1 if ex_interp leaves gs_cvars
 
+// v7.36: set by client_infochanged, consumed by the priority rotation task.
+// A plain bool and not a one-shot set_task on purpose: extension mode clears
+// the task manager mid-activation (after forwards run, before plugin_cfg), so
+// a one-shot armed from a forward can vanish silently — the flag persists
+// until a rotation tick reads it.
+new bool:gb_infoDirty[MAX_PLAYERS + 1]
+
 new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_nopred", "cl_cmdbackup", "cl_nodelta" }
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
@@ -610,6 +633,7 @@ public plugin_init() {
 		gb_netobsSampled[i] = false
 		gb_netInterpSeen[i] = false
 		gb_netInterpWarned[i] = false
+		gb_infoDirty[i] = false
 	}
 	gb_lagcompHeartbeatDone = false
 	gb_netobsHeartbeatDone = false
@@ -769,6 +793,9 @@ public client_putinserver(id) {
 	gb_netobsSampled[id] = false
 	gb_netInterpSeen[id] = false
 	gb_netInterpWarned[id] = false
+	// A new connection can beat the previous occupant's disconnect cleanup —
+	// a stale flag here would attribute the old occupant's edit to the new one
+	gb_infoDirty[id] = false
 
 	if (is_user_bot(id) || is_user_hltv(id))
 		return
@@ -843,6 +870,7 @@ public client_disconnected(id) {
 	gb_netobsSampled[id] = false
 	gb_netInterpSeen[id] = false
 	gb_netInterpWarned[id] = false
+	gb_infoDirty[id] = false
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
 	if (g_discordPending[id]) {
@@ -988,6 +1016,10 @@ public fn_check_priority_cvars(taskid) {
 
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id] || !gb_FirstCheckComplete[id])
 		return
+
+	// Consume any userinfo change deferred out of client_infochanged (v7.36:
+	// the forward makes no reads — see fn_infochanged_process)
+	fn_infochanged_process(id)
 
 	// Send ONE query per tick (engine only processes ~1 callback per frame)
 	new idx = gi_priority_cvar_index[id]
@@ -1336,14 +1368,39 @@ stock fn_netobs_sample(id) {
 	}
 }
 
-// Fires on every userinfo edit — name changes are the common case — so compare
-// against the cached state and only a real flip logs. Unsampled players
-// (still loading, bots, HLTV) stay at LAGCOMP_UNKNOWN and return early.
+// Fires on every userinfo edit — name changes are the common case. This forward
+// must make ZERO get_user_info() reads: cores without KTPAMXX#84 hold a raw
+// pointer to the player's name inside KTP-ReHLDS's 4-slot rotating info-value
+// buffer across the forward, and every found read — counted across ALL plugins
+// per event; admin.sma reads name first — advances the rotation. At four the
+// name slot is recycled and the cached name becomes another key's value
+// (players named "100000"). #84 copies the name before the forward, but this
+// plugin cannot know which core it runs on, and the budget stays shared with
+// every other plugin. So: mark the slot dirty; the priority rotation reads
+// outside the forward. Unsampled players (loading, bots, HLTV) stay at
+// LAGCOMP_UNKNOWN and return early — both guards are cached state, not reads.
 public client_infochanged(id) {
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || gb_StopChecking[id])
 		return
 	if (gi_lagcompState[id] == LAGCOMP_UNKNOWN)
 		return
+
+	gb_infoDirty[id] = true
+}
+
+// Deferred body of client_infochanged, called from fn_check_priority_cvars —
+// an already-repeating task, so no new one-shot exists for the extension-mode
+// activation clear to wipe; the dirty flag persists until a tick consumes it.
+// Compare against the cached state so only a real flip logs. Edits inside one
+// 0.3s tick coalesce: the read sees current userinfo, so a value that flips
+// and reverts within a tick logs nothing — the persisting transition is the
+// signal. Runs under the rotation's own is_user_connected/StopChecking gate,
+// and a slot recycled before the tick has the flag cleared at putinserver, so
+// a sample can never cross players.
+stock fn_infochanged_process(id) {
+	if (!gb_infoDirty[id])
+		return
+	gb_infoDirty[id] = false
 
 	new flags = fn_lagcomp_read(id)
 	if (flags != gi_lagcompState[id]) {
@@ -1353,7 +1410,7 @@ public client_infochanged(id) {
 		fn_lagcomp_log(id, "LAGCOMP_CHANGED", flags, prev)
 	}
 
-	// Netcode keys ride the same forward: a mid-session rate/updaterate edit is
+	// Netcode keys ride the same path: a mid-session rate/updaterate edit is
 	// exactly what the query rotation would take up to a full cycle to notice.
 	// Retry rather than return -- a read that failed at settle would otherwise
 	// disable this slot for the whole session, silently.
