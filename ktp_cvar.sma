@@ -2,10 +2,24 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.36
+ *   Current Version:   7.37
  *   Release Date:      2026-08-30
  *
  *   Changelog:
+ *   7.37 2026-08-30 - ex_interp pairing check compares against the EFFECTIVE
+ *                      packet interval, not the requested one. The engine
+ *                      floors a sub-10 cl_updaterate to 0.1s, then clamps into
+ *                      [1/sv_maxupdaterate, 1/sv_minupdaterate]; inside the
+ *                      enforced 100-120 band requested and effective coincide,
+ *                      so the headline case was right and the case the check
+ *                      most wants -- an UNCORRECTED client -- was missed.
+ *                    * FIXED: need = engine-effective interval (was 1/updaterate)
+ *                    * FIXED: low-updaterate clients no longer false-positive --
+ *                      sv_minupdaterate is 90 fleet-wide, so a 0.05s request is
+ *                      actually served at 1/90 and was being judged against 0.05
+ *                    * FIXED: INTERP_EPSILON 1e-4 -> 1e-6, closing a sub-0.1ms
+ *                      blind band (float error is ~1e-9 at these magnitudes)
+ *                    * FIXED: fn_netobs_query_observed missing bot/HLTV guard
  *   7.36 2026-08-30 - client_infochanged now makes ZERO userinfo reads. Core
  *                      executes the forward while holding a pointer to the
  *                      player's name inside KTP-ReHLDS's 4-slot rotating
@@ -232,7 +246,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.36"
+#define PLUGIN_VERSION "7.37"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -521,8 +535,10 @@ new gp_cvar_silent_tier_secs
 // gb_netobsSampled. (LAGCOMP_UNKNOWN can gate safely only because
 // fn_lagcomp_read returns 0..3 and can never collide.)
 #define NETOBS_UNKNOWN -1
-// Guards float equality at the boundary (ex_interp 0.01 vs 1/100).
-#define INTERP_EPSILON 0.0001
+// Guards float equality at the boundary (ex_interp 0.01 vs 1/100). Sized for
+// float representation error, which is ~1e-9 at these magnitudes -- 1e-4 was
+// three orders larger than that and silently excused a real 0.1ms shortfall.
+#define INTERP_EPSILON 0.000001
 
 // Observe-only cvars (v7.34): queried once at settle, logged, NEVER enforced.
 // Kept OUT of gs_cvars deliberately -- everything in that array is validated
@@ -538,6 +554,10 @@ new Float:gf_netInterp[MAX_PLAYERS + 1]     // last ex_interp seen via the QUERY
 new bool:gb_netInterpSeen[MAX_PLAYERS + 1]
 new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried ~4.5s
 new gi_exInterpIdx                           // derived; -1 if ex_interp leaves gs_cvars
+// Engine-owned rate clamp, resolved lazily -- 0 means "not found", which the
+// reader turns into "no clamp" rather than a runtime error on a null pcvar.
+new gp_cvar_sv_minupdaterate
+new gp_cvar_sv_maxupdaterate
 
 // v7.36: set by client_infochanged, consumed by the priority rotation task.
 // A plain bool and not a one-shot set_task on purpose: extension mode clears
@@ -1283,6 +1303,48 @@ stock fn_netobs_log(id, const event[], const detail[]) {
 		PLUGIN_NAME, event, gs_logauthid, gs_logname, gs_logip, detail)
 }
 
+// Reads an engine rate-clamp cvar. Returns 0.0 both when the cvar is genuinely
+// 0 and when it cannot be resolved -- the engine already treats 0.0 as "this
+// side does not clamp", so the unresolvable case degrades to the pre-7.37
+// unclamped comparison instead of erroring on a null pcvar.
+stock Float:fn_netobs_serverrate(&pointer, const name[]) {
+	if (!pointer)
+		pointer = get_cvar_pointer(name)
+	return pointer ? get_pcvar_float(pointer) : 0.0
+}
+
+// What the ENGINE will actually send this client, which is not 1/cl_updaterate.
+// SV_ExtractFromUserinfo floors a sub-10 request to a 0.1s interval, then
+// SV_CheckUpdateRate clamps into [1/sv_maxupdaterate, 1/sv_minupdaterate],
+// skipping either bound whose cvar is 0.0 and repairing a nonzero-but-tiny one
+// to 30.0 / 1.0 first. Inside the enforced 100-120 band requested and effective
+// coincide, which is why the headline case read correctly while the case worth
+// catching did not: cl_updaterate 200 with ex_interp 0.006 is served every
+// 0.00833s on a 120-cap server, so it IS under a packet -- comparing against
+// the requested 0.005 said it was fine. The down-clamp matters just as much:
+// sv_minupdaterate is 90 fleet-wide, so a client at cl_updaterate 20 is served
+// every 1/90s, not the 0.05s it asked for, and judging it against 0.05 called
+// a healthy ex_interp low.
+stock Float:fn_netobs_effective_interval(updaterate) {
+	new Float:interval = (updaterate >= 10) ? (1.0 / float(updaterate)) : 0.1
+
+	new Float:maxur = fn_netobs_serverrate(gp_cvar_sv_maxupdaterate, "sv_maxupdaterate")
+	if (maxur != 0.0 && maxur <= 0.001)
+		maxur = 30.0
+	new Float:minur = fn_netobs_serverrate(gp_cvar_sv_minupdaterate, "sv_minupdaterate")
+	if (minur != 0.0 && minur <= 0.001)
+		minur = 1.0
+
+	if (maxur != 0.0 && interval < 1.0 / maxur)
+		interval = 1.0 / maxur
+	if (minur != 0.0 && interval > 1.0 / minur)
+		interval = 1.0 / minur
+
+	// SV_CheckUpdateRate's `*rate == 0.0 -> 0.05` branch is unreachable from
+	// here: both arms above are strictly positive.
+	return interval
+}
+
 // ex_interp under one packet interval leaves the client with no newer snapshot
 // to interpolate toward. Both cvars are enforced independently and both can sit
 // in range while the PAIR does not -- enforced ranges are cl_updaterate 100-120
@@ -1297,7 +1359,7 @@ stock fn_netobs_eval_interp(id) {
 	if (updaterate <= 0 || gf_netInterp[id] <= 0.0)
 		return
 
-	new Float:need = 1.0 / float(updaterate)
+	new Float:need = fn_netobs_effective_interval(updaterate)
 	new bool:low = (gf_netInterp[id] < need - INTERP_EPSILON)
 
 	// ex_interp rides the ~4.5s priority rotation, so only TRANSITIONS log --
@@ -1340,6 +1402,11 @@ public fn_observecvar(id, const s_CVARNAME[], const s_VALUE[]) {
 // silent-client tripwire must stay keyed on enforcement queries, or an
 // unanswered observation would contribute to a kick decision.
 stock fn_netobs_query_observed(id) {
+	// Same guard fn_loopquery carries. A bot or HLTV proxy has no client to
+	// answer, so the three queries would go out and never return.
+	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || is_user_bot(id) || is_user_hltv(id))
+		return
+
 	for (new i = 0; i < OBSERVE_CVARS_COUNT; i++)
 		query_client_cvar(id, gs_observe_cvars[i], "fn_observecvar")
 }
