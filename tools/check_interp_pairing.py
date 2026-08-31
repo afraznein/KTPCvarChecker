@@ -26,6 +26,7 @@ Exits 0 when every check passes, 1 otherwise.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 
@@ -57,6 +58,35 @@ def check(ok: bool, label: str, detail: str = "") -> None:
         failures.append(f"{label}{': ' + detail if detail else ''}")
 
 
+def strip_comments(code: str) -> str:
+    """Drop `//` comments, leaving `//` inside string literals alone.
+
+    Load-bearing, not tidiness. These assertions match on things that show up
+    in PROSE as readily as in code: a comment reading "%.6f, not %.4f" trips
+    the precision check, and a comment quoting `need = 1.0 / float(updaterate)`
+    to explain the old defect would make the negative assertion below report
+    the defect as present. Comments describing a fix must not be able to fail
+    the check for that fix.
+    """
+    out = []
+    for line in code.splitlines():
+        in_str = False
+        esc = False
+        for i, ch in enumerate(line):
+            if esc:
+                esc = False
+                continue
+            if ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = not in_str
+            elif ch == "/" and not in_str and line[i + 1:i + 2] == "/":
+                line = line[:i]
+                break
+        out.append(line)
+    return "\n".join(out)
+
+
 def body_of(src: str, fn: str, required: bool = False) -> str:
     """Source text of one `stock`/`public` function, brace-matched.
 
@@ -65,6 +95,8 @@ def body_of(src: str, fn: str, required: bool = False) -> str:
     sends a reader to debug the wrong thing. Only the control functions, which
     predate this gate and must always exist, pass required=True; those really
     do mean the extractor is broken.
+
+    Comments are stripped from the returned body — see strip_comments().
     """
     m = re.search(r"^(?:stock|public)[^\n(]*\b" + re.escape(fn) + r"\s*\(", src, re.M)
     if not m:
@@ -80,7 +112,7 @@ def body_of(src: str, fn: str, required: bool = False) -> str:
         elif src[j] == "}":
             depth -= 1
             if depth == 0:
-                return src[i:j + 1]
+                return strip_comments(src[i:j + 1])
     raise SystemExit(f"FAIL: unbalanced braces in {fn}()")
 
 
@@ -104,8 +136,18 @@ def part1(src: str) -> float:
     check(eps > 0.0, "INTERP_EPSILON must stay positive",
           f"{eps:g} — 0 would make the comparison bare float equality")
 
-    # --- Fix 1: the evaluator uses the effective interval, not the request.
+    # --- The log line must be able to RENDER what the epsilon now detects.
+    # At 1e-6, a caught shortfall can be smaller than %.4f resolves, which
+    # prints two identical numbers either side of a LOW verdict. Derived from
+    # the epsilon rather than hardcoded, so the two cannot drift apart.
     ev = body_of(src, "fn_netobs_eval_interp")
+    needed_dp = max(0, -int(f"{eps:e}".split("e")[1]))
+    for m in re.finditer(r"%\.(\d+)f", ev):
+        check(int(m.group(1)) >= needed_dp, "log precision vs INTERP_EPSILON",
+              f"%.{m.group(1)}f cannot show a shortfall of {eps:g}; "
+              f"need at least %.{needed_dp}f")
+
+    # --- Fix 1: the evaluator uses the effective interval, not the request.
     check("fn_netobs_effective_interval(" in ev, "eval uses effective interval",
           "fn_netobs_eval_interp() no longer calls fn_netobs_effective_interval()")
     check(not re.search(r"need\s*=\s*1\.0\s*/\s*float\(", ev),
@@ -123,10 +165,40 @@ def part1(src: str) -> float:
           "clamp helper", "missing the engine's sub-10 floor (i >= 10)")
     check(str(UPDATERATE_FLOOR_INTERVAL) in eff, "clamp helper",
           f"missing the {UPDATERATE_FLOOR_INTERVAL}s floor interval")
-    # A zero bound means "this side does not clamp" — dropping the guard would
-    # divide by zero on a server that disables one bound.
-    check(eff.count("!= 0.0") >= 2, "clamp helper",
-          "lost the `cvar != 0.0` guards — 1.0/0.0 on a server with a bound disabled")
+    # DIRECTION, asserted against the Pawn itself. This is the inversion the
+    # whole fix turns on and the one thing Part 2 cannot cover: `*rate` is an
+    # INTERVAL, so sv_MAXupdaterate is its LOWER bound (raised with `<`) and
+    # sv_MINupdaterate its UPPER bound (lowered with `>`). Swap the two
+    # operators and every other assertion in this file still passes, because
+    # Part 2 only pins the direction in its own Python transcription.
+    #
+    # Each pattern also requires the `!= 0.0` guard on the same divisor. A
+    # counting assertion cannot do that: the helper contains four `!= 0.0`
+    # (two sanitize, two clamp), so `count >= 2` passes with BOTH clamp guards
+    # deleted. And an unguarded divide does not raise here — x86 gives +inf,
+    # so `interval` becomes inf and every client silently reports LOW.
+    both = r"{c}\s*!=\s*0\.0\s*&&\s*interval\s*{op}\s*1\.0\s*/\s*{c}"
+    check(re.search(both.format(c="maxur", op="<"), eff) is not None,
+          "clamp direction / guard (sv_maxupdaterate)",
+          "expected `maxur != 0.0 && interval < 1.0 / maxur` — sv_maxupdaterate "
+          "is the interval's LOWER bound. Either the comparison is inverted, "
+          "the guard is gone, or the local was renamed")
+    check(re.search(both.format(c="minur", op=">"), eff) is not None,
+          "clamp direction / guard (sv_minupdaterate)",
+          "expected `minur != 0.0 && interval > 1.0 / minur` — sv_minupdaterate "
+          "is the interval's UPPER bound. Either the comparison is inverted, "
+          "the guard is gone, or the local was renamed")
+
+    # The sanitize branches are the other two `!= 0.0`. They are belt-and-braces
+    # in production (the engine repairs via Cvar_Set, which persists, so the
+    # plugin reads 30.0/1.0 already) — pinned so nobody removes them on the
+    # grounds that they never fire.
+    for local, repaired in (("maxur", "30.0"), ("minur", "1.0")):
+        check(re.search(local + r"\s*!=\s*0\.0\s*&&\s*" + local + r"\s*<=\s*0\.001",
+                        eff) is not None,
+              f"sanitize guard ({local})", "missing the engine's <= 0.001 repair")
+        check(f"{local} = {repaired}" in eff, f"sanitize value ({local})",
+              f"engine repairs this bound to {repaired}")
 
     # --- Fix 3: bot/HLTV guard, matching fn_loopquery.
     guard = r"is_user_bot\(id\)\s*\|\|\s*is_user_hltv\(id\)"
@@ -151,14 +223,24 @@ def part1(src: str) -> float:
     return eps
 
 
-def check_readme(src: str, path: str = "README.md") -> None:
-    """README's version banner is the third copy — keep it in lockstep too."""
+def check_readme(src: str, sma_path: str) -> None:
+    """README's version banner is the third copy — keep it in lockstep too.
+
+    Fails CLOSED. Every other assertion here carries a positive control because
+    "stopped matching" and "clean" are indistinguishable; an early `return` on
+    a missing file or pattern would reintroduce exactly that. README is also
+    resolved next to the .sma, not against CWD, so `--sma other/tree/x.sma`
+    checks that tree's README instead of silently skipping.
+    """
     mv = re.search(r'#define\s+PLUGIN_VERSION\s+"([^"]+)"', src)
+    check(mv is not None, "PLUGIN_VERSION", "not found — lockstep check is blind")
     if not mv:
         return
+    path = os.path.join(os.path.dirname(os.path.abspath(sma_path)), "README.md")
     try:
         readme = open(path, encoding="utf-8", errors="replace").read()
-    except FileNotFoundError:
+    except OSError as e:
+        check(False, "README not readable", f"{path}: {e}")
         return
     mr = re.search(r"\*\*Version\s+([0-9.]+)\*\*", readme)
     check(mr is not None, "README version banner",
@@ -281,7 +363,7 @@ def main() -> int:
     src = open(args.sma, encoding="utf-8", errors="replace").read()
 
     eps = part1(src)
-    check_readme(src)
+    check_readme(src, args.sma)
     part2(eps)
 
     if failures:

@@ -87,12 +87,35 @@ of magnitude larger than the thing it was sized for, and excused any shortfall
 under 0.1ms. `1e-6` closes that band and still clears representation error by
 three orders.
 
+**The log line moved with it:** `NETOBS_INTERP_LOW` formatted `ex_interp` and
+`need` as `%.4f`, which cannot resolve a shortfall the new epsilon catches — a
+0.05ms gap would have printed two identical numbers either side of a LOW
+verdict, indistinguishable from a bug to whoever read the log. Now `%.6f`. The
+gate derives the required precision *from* `INTERP_EPSILON` rather than
+hardcoding it, so tightening the epsilon again cannot silently outrun the
+format.
+
 ### Fixed — `fn_netobs_query_observed` missing the bot/HLTV guard
 
 `fn_loopquery` carries `is_user_bot`/`is_user_hltv`; the observe-cvar one-shot
-did not, so three queries went out to clients that cannot answer. Reachability
-is low — it is the last statement in `fn_start_monitoring` — so this is
-hardening rather than a defect. Same guard, same spelling.
+did not, so three queries went out to clients that cannot answer. Same guard,
+same spelling.
+
+#8's review called this "low reachability … it is the last statement in
+`fn_start_monitoring`". **Statement position gates nothing, and that is not the
+reason.** The real one, verified at source: `client_putinserver` returns for
+bots and HLTV *before* it arms `set_task(10.0, "fn_start_monitoring", id)`, so
+a bot never schedules this path for itself. But **that same early return also
+sits before the v7.28 `remove_task(id)` block**, so a bot inheriting a recycled
+slot does not cancel the previous occupant's pending task — and the plugin's own
+v7.28 comment says disconnect cleanup cannot be trusted to have run. So there is
+a real if narrow path: human connects, disconnect cleanup misses, a bot fills
+the slot inside 10s with `gb_StopChecking` still false, and the task fires
+against a bot. The guard closes a slot-recycle race, not a style gap.
+
+Severity stays low: `CPlayer::Connect`/`Disconnect` in KTPAMXX both flush
+pending queries and run for fake clients in extension mode, so an unanswered
+query self-heals at the bot's next connect rather than leaking.
 
 ### Verified, no change — Published CVARs gate
 
@@ -127,10 +150,30 @@ README — and only the first two were ever compared to each other. All three ar
 now checked against each other, verified by desyncing README and watching it go
 red.
 
+Two things the gate asserts that the arithmetic half structurally cannot: the
+**clamp direction in the Pawn** (`*rate` is an interval, so `sv_maxupdaterate`
+is its *lower* bound raised with `<` and `sv_minupdaterate` its *upper* bound
+lowered with `>` — invert either and Part 2 still passes, since Part 2 only
+pins direction in its own transcription), and the `!= 0.0` guard **on the same
+divisor as each divide**. A counting assertion cannot do the latter: the helper
+contains four `!= 0.0`, two sanitize and two clamp, so a `count >= 2` passes
+with both clamp guards deleted — and an unguarded divide here does not raise,
+it yields `+inf`, which marks every client LOW silently.
+
+Comments are stripped before matching. That is load-bearing, not tidiness:
+these patterns match prose as readily as code, so a comment reading
+"`%.6f`, not `%.4f`" tripped the precision check, and a comment quoting the old
+`need = 1.0 / float(updaterate)` to explain the defect would make the negative
+assertion report that defect as present. A comment describing a fix must not be
+able to fail the check for that fix.
+
 Every assertion carries a positive control, since a regex that stops matching
 reports "clean" identically to a codebase that is clean. Verified in both
 directions rather than just green-on-HEAD: run it against pre-7.37 source and
-each reverted fix reports individually. A missing helper is reported as a
+each reverted fix reports individually. Each assertion was also mutation-tested
+against a deliberately broken copy — inverted clamp operators, a dropped guard,
+a reverted format string, a changed sanitize constant, a removed floor — and
+each mutation is caught by the assertion that names it. A missing helper is reported as a
 reverted fix, **not** as a broken parser — those two diagnoses send a reader to
 opposite places, so the gate distinguishes them deliberately (only the control
 functions, which predate the gate, treat absence as parser breakage).

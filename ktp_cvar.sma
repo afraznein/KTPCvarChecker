@@ -1368,8 +1368,11 @@ stock fn_netobs_eval_interp(id) {
 		return
 	gb_netInterpWarned[id] = low
 
+	// %.6f, not %.4f: INTERP_EPSILON is 1e-6, so a shortfall this check now
+	// catches can be smaller than 4dp resolves -- printing it would put two
+	// identical numbers either side of a LOW verdict.
 	new detail[112]
-	formatex(detail, charsmax(detail), "ex_interp=%.4f cl_updaterate=%d need=%.4f",
+	formatex(detail, charsmax(detail), "ex_interp=%.6f cl_updaterate=%d need=%.6f",
 		gf_netInterp[id], updaterate, need)
 	fn_netobs_log(id, low ? "NETOBS_INTERP_LOW" : "NETOBS_INTERP_OK", detail)
 }
@@ -1402,8 +1405,9 @@ public fn_observecvar(id, const s_CVARNAME[], const s_VALUE[]) {
 // silent-client tripwire must stay keyed on enforcement queries, or an
 // unanswered observation would contribute to a kick decision.
 stock fn_netobs_query_observed(id) {
-	// Same guard fn_loopquery carries. A bot or HLTV proxy has no client to
-	// answer, so the three queries would go out and never return.
+	// Same guard fn_loopquery carries. Bots never arm this path themselves --
+	// but client_putinserver's bot return also skips remove_task(), so a bot
+	// inheriting a slot can still run the previous occupant's pending task.
 	if (id < 1 || id > MAX_PLAYERS || !is_user_connected(id) || is_user_bot(id) || is_user_hltv(id))
 		return
 
