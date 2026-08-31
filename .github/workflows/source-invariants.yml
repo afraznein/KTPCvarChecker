@@ -1,0 +1,30 @@
+# Source-level invariants for ktp_cvar.sma.
+#
+# This repo has no Pawn test harness — plugin logic cannot be executed outside
+# a running AMXX server, and building an .amxx to try is not an option (it
+# churns an md5 that is pinned to a review). What CAN be checked without a
+# runtime is that the shipped source still carries fixes we already reasoned
+# through once. That is what this job does.
+#
+# Not path-filtered, for the reason smoke.yml spells out: a filtered workflow
+# never reports on a PR it skips, so if this is ever promoted to a required
+# check the filter would make branches unmergeable. The job is one Python run.
+
+name: Source Invariants
+
+on:
+  push:
+    branches: ['**']
+  pull_request: {}
+  workflow_dispatch:
+
+jobs:
+  interp-pairing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: ex_interp pairing invariants (v7.37)
+        run: python3 tools/check_interp_pairing.py

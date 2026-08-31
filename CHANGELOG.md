@@ -38,6 +38,146 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.37] - 2026-08-30
+
+Clears the four follow-ups recorded in #8's review. Three were real and are
+fixed; the fourth was a re-check that came back clean and needed no change.
+
+### Fixed — `ex_interp` pairing compares against the EFFECTIVE packet interval
+
+`fn_netobs_eval_interp` computed `need = 1.0 / cl_updaterate` — the interval the
+client *asked* for, not the one the engine will serve it. ReHLDS
+(`sv_main.cpp`) derives `next_messageinterval` in two steps: `SV_ExtractFromUserinfo`
+floors a sub-10 `cl_updaterate` to a flat `0.1`s, then `SV_CheckUpdateRate`
+clamps into `[1/sv_maxupdaterate, 1/sv_minupdaterate]`, skipping either bound
+whose cvar is `0.0` and repairing a nonzero-but-tiny one to `30.0`/`1.0` first.
+
+Inside the enforced 100–120 band requested and effective coincide, so the case
+7.35 was written for stayed correct the whole time. The case it *missed* is the
+one the check most wants: a client at `cl_updaterate 200` with `ex_interp 0.006`
+is served every `1/120 = 0.00833`s on a 120-cap server, so it is genuinely
+inside one packet — but measured against the requested `0.005` it looked fine
+and logged nothing. **Uncorrected clients are the entire population of
+interest**, and they are exactly the ones sitting outside the enforced band.
+
+**It cuts the other way too, and on this fleet that half is the bigger one.**
+Measured on Atlanta 2026-08-30 (all five `dodserver.cfg`, with `sv_password` as
+a positive control that the grep was reading the files): `sv_maxupdaterate 120`
+and **`sv_minupdaterate 90`** — not the engine default of 10. So the effective
+interval is pinned into `[1/120, 1/90]` = `[0.00833, 0.01111]` regardless of
+what the client asks for. A client at `cl_updaterate 20` requests a 0.05s
+interval and v7.35 compared `ex_interp` against that, so `ex_interp 0.02` — very
+nearly twice the interval the engine actually serves — logged
+`NETOBS_INTERP_LOW`. That is a false positive on an observation-only check, and
+low-updaterate clients are precisely the uncorrected population this check
+exists to look at. The down-clamp removes it.
+
+New `fn_netobs_effective_interval()` mirrors both engine steps. The two server
+cvars resolve lazily through `fn_netobs_serverrate()`, which returns `0.0` when
+a pointer will not resolve — the engine already reads `0.0` as "this side does
+not clamp", so an unresolvable cvar degrades to the old unclamped comparison
+rather than erroring on a null pcvar. The `!= 0.0` guards are load-bearing in
+their own right: without them a server that disables a bound divides by zero.
+
+### Fixed — `INTERP_EPSILON` `1e-4` → `1e-6`
+
+The epsilon guards float equality at the boundary (`ex_interp 0.01` vs `1/100`).
+Representation error at these magnitudes is ~`1e-9`, so `1e-4` was three orders
+of magnitude larger than the thing it was sized for, and excused any shortfall
+under 0.1ms. `1e-6` closes that band and still clears representation error by
+three orders.
+
+**The log line moved with it:** `NETOBS_INTERP_LOW` formatted `ex_interp` and
+`need` as `%.4f`, which cannot resolve a shortfall the new epsilon catches — a
+0.05ms gap would have printed two identical numbers either side of a LOW
+verdict, indistinguishable from a bug to whoever read the log. Now `%.6f`. The
+gate derives the required precision *from* `INTERP_EPSILON` rather than
+hardcoding it, so tightening the epsilon again cannot silently outrun the
+format.
+
+### Fixed — `fn_netobs_query_observed` missing the bot/HLTV guard
+
+`fn_loopquery` carries `is_user_bot`/`is_user_hltv`; the observe-cvar one-shot
+did not, so three queries went out to clients that cannot answer. Same guard,
+same spelling.
+
+#8's review called this "low reachability … it is the last statement in
+`fn_start_monitoring`". **Statement position gates nothing, and that is not the
+reason.** The real one, verified at source: `client_putinserver` returns for
+bots and HLTV *before* it arms `set_task(10.0, "fn_start_monitoring", id)`, so
+a bot never schedules this path for itself. But **that same early return also
+sits before the v7.28 `remove_task(id)` block**, so a bot inheriting a recycled
+slot does not cancel the previous occupant's pending task — and the plugin's own
+v7.28 comment says disconnect cleanup cannot be trusted to have run. So there is
+a real if narrow path: human connects, disconnect cleanup misses, a bot fills
+the slot inside 10s with `gb_StopChecking` still false, and the task fires
+against a bot. The guard closes a slot-recycle race, not a style gap.
+
+Severity stays low: `CPlayer::Connect`/`Disconnect` in KTPAMXX both flush
+pending queries and run for fake clients in extension mode, so an unanswered
+query self-heals at the bot's next connect rather than leaking.
+
+### Verified, no change — Published CVARs gate
+
+#8's fourth follow-up asked whether the observe-only cvars (`cl_nopred`,
+`cl_cmdbackup`, `cl_nodelta`) would trip the Published CVARs gate if they ever
+reached `KTP Cvar List.md`. Re-checked against the live doc on this commit:
+`tools/check_published_cvars.py` reports 37 enforced on both sides, 5 tunable,
+no contradiction, control cvar found — enforced and published agree. The three observe cvars are deliberately
+outside `gs_cvars`, so the gate does not see them at all — they only become a
+concern the day someone publishes them, and then they must land under a
+`PLAYER_TUNABLE_HEADING` match. Recorded here rather than fixed, because there
+is nothing to fix yet.
+
+### Added — source-invariant gate (no Pawn test harness exists)
+
+`tools/check_interp_pairing.py`, wired into a new `Source Invariants` workflow.
+
+**This repo has no Pawn test harness and this is not one.** Plugin logic cannot
+run outside a live AMXX server, and building an `.amxx` to test against would
+churn an md5 pinned to a review. The gate does the two things possible without
+a runtime: it asserts the shipped source still carries each fix above (revert
+any one and it fails), and it pins the clamp arithmetic against a transcription
+of `SV_CheckUpdateRate`, with the engine source quoted inline so the
+transcription is auditable. A transcription cannot prove the Pawn agrees with
+it — the source half is what ties the Pawn to the intent, by requiring it to
+call the helper rather than open-code a divide. `INTERP_EPSILON` is read from
+the `.sma` rather than retyped, so the two halves cannot drift apart.
+
+It also closes the version-lockstep hole #9 was opened for. The version is
+written in three places — `PLUGIN_VERSION`, the `.sma` header banner, and
+README — and only the first two were ever compared to each other. All three are
+now checked against each other, verified by desyncing README and watching it go
+red.
+
+Two things the gate asserts that the arithmetic half structurally cannot: the
+**clamp direction in the Pawn** (`*rate` is an interval, so `sv_maxupdaterate`
+is its *lower* bound raised with `<` and `sv_minupdaterate` its *upper* bound
+lowered with `>` — invert either and Part 2 still passes, since Part 2 only
+pins direction in its own transcription), and the `!= 0.0` guard **on the same
+divisor as each divide**. A counting assertion cannot do the latter: the helper
+contains four `!= 0.0`, two sanitize and two clamp, so a `count >= 2` passes
+with both clamp guards deleted — and an unguarded divide here does not raise,
+it yields `+inf`, which marks every client LOW silently.
+
+Comments are stripped before matching. That is load-bearing, not tidiness:
+these patterns match prose as readily as code, so a comment reading
+"`%.6f`, not `%.4f`" tripped the precision check, and a comment quoting the old
+`need = 1.0 / float(updaterate)` to explain the defect would make the negative
+assertion report that defect as present. A comment describing a fix must not be
+able to fail the check for that fix.
+
+Every assertion carries a positive control, since a regex that stops matching
+reports "clean" identically to a codebase that is clean. Verified in both
+directions rather than just green-on-HEAD: run it against pre-7.37 source and
+each reverted fix reports individually. Each assertion was also mutation-tested
+against a deliberately broken copy — inverted clamp operators, a dropped guard,
+a reverted format string, a changed sanitize constant, a removed floor — and
+each mutation is caught by the assertion that names it. A missing helper is reported as a
+reverted fix, **not** as a broken parser — those two diagnoses send a reader to
+opposite places, so the gate distinguishes them deliberately (only the control
+functions, which predate the gate, treat absence as parser breakage).
+
 ## [7.36] - 2026-08-30
 
 ### Fixed — zero userinfo reads inside `client_infochanged` (fleet name-corruption mitigation)
