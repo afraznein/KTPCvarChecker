@@ -24,6 +24,12 @@
  *                      by players who followed the console instruction
  *                    * ADDED: tools/check_enforce_roundtrip.py (CI) runs every
  *                      bound through the write-back on both FPU models
+ *                    * CHANGED: ex_interp floor 0.009 -> 0.01, the value the
+ *                      public cvar list tells players to set. 0.009 was the
+ *                      7.22 nudge around this exact defect and never worked
+ *                      (it truncated to "0.008"); with the string write-back
+ *                      the intended value round-trips. One packet at
+ *                      cl_updaterate's floor, held by check_interp_pairing.py
  *   7.37 2026-08-30 - ex_interp pairing check compares against the EFFECTIVE
  *                      packet interval, not the requested one. The engine
  *                      floors a sub-10 cl_updaterate to 0.1s, then clamps into
@@ -478,7 +484,7 @@ new gs_calvalues[TOTAL_CVARS][] = {
 "225", "210", "0.67", "0.8",
 "0", "2.2", "0",                  // gl_picmip, r_glowshellfreq, r_traceglow — see v7.26 note above for r_glowshellfreq=2.2 rationale
 "2", "1.809", "0", "100",
-"100", "100000", "0.009", "60"
+"100", "100000", "0.01", "60"
 }
 
 // Range cvar upper bounds (paired with gs_calvalues lower bounds for indices >= MIN_MAX_CVAR_START).
@@ -488,7 +494,8 @@ new gs_calvalues[TOTAL_CVARS][] = {
 //   2: cl_updaterate (cal=100 → alt=120)
 //   3: cl_cmdrate  (cal=100   → alt=1000)   v7.25: was 500, raised to enable input-resolution testing
 //   4: rate        (cal=alt=100000, locked single value)
-//   5: ex_interp   (cal=0.009 → alt=0.05)
+//   5: ex_interp   (cal=0.01 → alt=0.05)   floor = one packet at cl_updaterate's floor (1/100); a FIXED string,
+//                                          never derived per client -- tools/check_interp_pairing.py holds it
 //   6: fps_max     (cal=60    → alt=750)
 new gs_altvalues[ALT_VALUES_COUNT][] = {
 "3", "0.011", "120", "1000", "100000", "0.05", "750"
@@ -1372,11 +1379,11 @@ stock Float:fn_netobs_effective_interval(updaterate) {
 }
 
 // ex_interp under one packet interval leaves the client with no newer snapshot
-// to interpolate toward. Both cvars are enforced independently and both can sit
-// in range while the PAIR does not -- enforced ranges are cl_updaterate 100-120
-// and ex_interp 0.009-0.05, so 0.009 at updaterate 100 is under the 0.010
-// interval and still passes both rules. Nothing else in the plugin compares two
-// cvars, so this is the only place the pairing is visible.
+// to interpolate toward. Both cvars are enforced independently; with the
+// ex_interp floor at 1/100 (one packet at cl_updaterate's floor) an in-band
+// pair can no longer be LOW, so from 7.38 this fires only for a client between
+// arrival and correction. Nothing else in the plugin compares two cvars, so
+// this is the only place the pairing is visible.
 stock fn_netobs_eval_interp(id) {
 	if (!gb_netInterpSeen[id] || !gb_netobsSampled[id])
 		return

@@ -87,6 +87,33 @@ would have excused `0.0095`, the wrong direction.
   raw string through the defer queue was not worth a per-slot string table.
 - `FCOS_LANG_LOG_ENTRY`'s KTP-value placeholder is `%s`.
 
+### Changed — `ex_interp` floor `0.009 → 0.01`
+
+The public cvar list tells players *"Set 0.01"* while the plugin enforced 0.009 —
+the doc and the enforcement disagreed, and the enforcement is what stranded a
+quarter of corrected players one packet short. 0.009 was never a considered value:
+it was the 7.22 nudge around the truncation defect above, and it did not even
+work (it truncated to `0.008`). With the string write-back the intended value
+round-trips, so the nudge is gone.
+
+`0.01` is one packet at `cl_updaterate`'s floor (`1/100`), the largest interval in
+the enforced band — not `1/sv_maxupdaterate` (`1/120 = 0.0083`, which is under one
+packet for a client at 100). `tools/check_interp_pairing.py` now asserts
+`ex_interp floor >= 1 / cl_updaterate floor` as exact decimals, with a control
+that the old 0.009 fails it, so a future rate change fails CI rather than
+silently stranding the floor. The value stays a **fixed table string**: deriving
+it per client at runtime would format a float back into a string, which is the
+defect this release removes.
+
+A consequence for the v7.35 pairing check: an in-band pair can no longer read
+`NETOBS_INTERP_LOW`, so that line now marks only the window between a client's
+arrival and its correction.
+
+**Not changed, flagged for a ruling:** `lightgamma` floor stays `1.809` (its float32
+rounds up, so the 7.22 nudge did work; 1.81 vs the community's 1.8 is a policy
+question, not a precision one) and `cl_bob` ceiling stays `0.011` (truncation
+never exceeds a ceiling, so it never looped; 0.01 would be cosmetic).
+
 ### Added — `tools/check_enforce_roundtrip.py`, run by the Source Invariants workflow
 
 Reads both tables out of the `.sma` and runs **every bound** through the write-back

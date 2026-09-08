@@ -250,6 +250,61 @@ def check_readme(src: str, sma_path: str) -> None:
               f'README "{mr.group(1)}" vs PLUGIN_VERSION "{mv.group(1)}"')
 
 
+def table(src: str, name: str) -> list[str]:
+    """String entries of one `name[N][] = { ... }` table, comments stripped."""
+    m = re.search(name + r"\s*\[[^\]]*\]\s*\[\s*\]\s*=\s*\{(.*?)\}", src, re.S)
+    if not m:
+        raise SystemExit(f"FAIL: could not find {name}[] — this gate is blind")
+    return re.findall(r'"([^"]*)"', re.sub(r"//[^\n]*", "", m.group(1)))
+
+
+def check_interp_floor(src: str) -> None:
+    """The enforced ex_interp FLOOR must cover one packet at cl_updaterate's FLOOR.
+
+    A client at the bottom of the enforced band (cl_updaterate 100) is served
+    every 1/100 s, so an ex_interp floor below 0.01 leaves that client one
+    packet short while satisfying both rules. The reference is cl_updaterate's
+    floor, NOT sv_maxupdaterate: 1/120 = 0.0083 is under one packet for
+    exactly that client.
+
+    The floor is a FIXED table string on purpose. Deriving it per client at
+    runtime would mean formatting a float back into a string to send it, which
+    is the v7.38 defect (check_enforce_roundtrip.py). So a future rate change
+    must fail HERE rather than silently strand the floor — that is the whole
+    point of pinning it in CI.
+
+    Compared as exact decimals: the table strings are what the client receives
+    and re-reports, so the decimal is the value that matters, not its float32.
+    """
+    from fractions import Fraction
+
+    names, cal = table(src, "gs_cvars"), table(src, "gs_calvalues")
+    check(len(names) == len(cal), "table lengths",
+          f"gs_cvars {len(names)} vs gs_calvalues {len(cal)} — positional arrays")
+    vals = dict(zip(names, cal))
+    check("ex_interp" in vals and "cl_updaterate" in vals, "floor guard",
+          "ex_interp or cl_updaterate is no longer in gs_cvars — the guard is blind")
+    if "ex_interp" not in vals or "cl_updaterate" not in vals:
+        return
+    need = 1 / Fraction(vals["cl_updaterate"])
+    # Parse sanity: a table read that came back as "0" or "" would make the
+    # comparison below trivially pass or raise. cl_updaterate lives in [10, 1000].
+    check(Fraction(1, 1000) <= need <= Fraction(1, 10), "CONTROL floor guard inputs",
+          f"1/cl_updaterate = {float(need):g} is outside [0.001, 0.1] — misparsed table")
+    check(Fraction(vals["ex_interp"]) > 0, "CONTROL floor guard inputs",
+          f"ex_interp floor parsed as {vals['ex_interp']!r}")
+    check(Fraction(vals["ex_interp"]) >= need,
+          "ex_interp floor covers one packet at cl_updaterate's floor",
+          f"ex_interp floor {vals['ex_interp']} < 1/{vals['cl_updaterate']} = "
+          f"{float(need):.6f} — a client at the band's bottom is one packet short. "
+          "Raise the ex_interp floor; do not derive it at runtime")
+    # The shape this guard exists for, pinned as arithmetic rather than against
+    # the live table so a legitimate rate change cannot turn it into a false alarm:
+    # the 7.22–7.37 floor (0.009) at the band's bottom (100) is one packet short.
+    check(Fraction("0.009") < 1 / Fraction("100"), "CONTROL floor guard discriminates",
+          "the predicate does not fail the 7.37 shape — the guard is vacuous")
+
+
 # ===========================================================================
 # Part 2 — the arithmetic the fix implements
 # ===========================================================================
@@ -289,9 +344,11 @@ def part2(eps: float) -> None:
         # ... and the same client is fine once ex_interp clears the real interval.
         ("updaterate 200 / ex_interp 0.010", False, (0.010, 200)),
 
-        # The v7.35 headline case must keep working: both cvars in range, pair
-        # is not. 1/100 = 0.01 sits inside the clamp, so nothing moves.
-        ("in-band pair, updaterate 100 / ex_interp 0.009", True, (0.009, 100)),
+        # The v7.35 headline case: 1/100 = 0.01 sits inside the clamp, so nothing
+        # moves. 0.009 was the enforced floor from 7.22 to 7.37 and is kept as
+        # the arithmetic case; since 7.38 the floor is 0.01 (check_interp_floor),
+        # so an IN-BAND pair can no longer be LOW.
+        ("under the old floor, updaterate 100 / ex_interp 0.009", True, (0.009, 100)),
         ("in-band pair, updaterate 100 / ex_interp 0.011", False, (0.011, 100)),
 
         # Exactly at the boundary is OK, not LOW — that is what the epsilon is for.
@@ -364,6 +421,7 @@ def main() -> int:
 
     eps = part1(src)
     check_readme(src, args.sma)
+    check_interp_floor(src)
     part2(eps)
 
     if failures:
