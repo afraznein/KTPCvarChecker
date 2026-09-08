@@ -28,3 +28,5 @@ jobs:
           python-version: '3.12'
       - name: ex_interp pairing invariants (v7.37)
         run: python3 tools/check_interp_pairing.py
+      - name: enforcement write-back round trip (v7.38)
+        run: python3 tools/check_enforce_roundtrip.py

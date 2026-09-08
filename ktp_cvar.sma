@@ -2,10 +2,28 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.37
- *   Release Date:      2026-08-30
+ *   Current Version:   7.38
+ *   Release Date:      2026-09-08
  *
  *   Changelog:
+ *   7.38 2026-09-08 - Enforcement write-back sends the bound's own table string.
+ *                      AMXX's %f truncates instead of rounding, so a bound whose
+ *                      float32 sits just under its decimal value went out one
+ *                      digit short (0.01 -> "0.009", 0.009 -> "0.008"), the
+ *                      client re-reported it, it failed the same bound, and after
+ *                      MAX_ENFORCE_ATTEMPTS the player was announced as blocking
+ *                      enforcement. On the x87 core it also hit exact values
+ *                      (0.5 -> "0.499", 89 -> "88.999").
+ *                    * FIXED: client_cmd sends gs_calvalues[]/gs_altvalues[]/
+ *                      inverse_p verbatim -- identical strings parse to identical
+ *                      floats, so the compare is exact with no tolerance
+ *                    * FIXED: defer queue carries WHICH bound was crossed (bit
+ *                      per range cvar), not a float copy of it
+ *                    * FIXED: BLOCKED instructions, chat, log and Discord text
+ *                      show the same string -- "m_pitch 0.021" was being typed
+ *                      by players who followed the console instruction
+ *                    * ADDED: tools/check_enforce_roundtrip.py (CI) runs every
+ *                      bound through the write-back on both FPU models
  *   7.37 2026-08-30 - ex_interp pairing check compares against the EFFECTIVE
  *                      packet interval, not the requested one. The engine
  *                      floors a sub-10 cl_updaterate to 0.1s, then clamps into
@@ -246,7 +264,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.37"
+#define PLUGIN_VERSION "7.38"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -337,7 +355,12 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
 new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-4: cvar indices 32-36
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
-new Float:g_deferCalValue[MAX_PLAYERS + 1][TOTAL_CVARS]  // target float value per cvar
+// Which bound a range cvar crossed, bit (cvar_index - MIN_MAX_CVAR_START): set
+// means the ceiling (correction is gs_altvalues[]), clear means the floor
+// (gs_calvalues[]). The correction is resolved to the bound's own STRING at
+// enforcement time and never carried as a float -- formatting a float back
+// into a string is the defect fn_enforce_cvar describes.
+new g_deferCeiling[MAX_PLAYERS + 1]
 
 // ============================================================================
 // GLOBAL VARIABLES
@@ -364,7 +387,8 @@ new g_discordPlayerAuthid[MAX_PLAYERS + 1][DISCORD_AUTHID_LEN]
 new g_discordPlayerIp[MAX_PLAYERS + 1][DISCORD_IP_LEN]
 new g_discordCvarNames[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS][MAX_CVAR_NAME_LEN]
 new Float:g_discordCvarValues[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]      // Player's bad value
-new Float:g_discordCvarCorrected[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]   // Corrected to value
+#define CORRECTION_LEN 16   // longest table string is "100000"; "-0.022" for m_pitch
+new g_discordCvarCorrected[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS][CORRECTION_LEN]  // Corrected-to value, the bound's own string
 new g_discordCvarCounts[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]            // Repeat count per cvar
 new g_discordViolationCount[MAX_PLAYERS + 1]                              // Unique cvars in buffer
 new bool:g_discordPending[MAX_PLAYERS + 1]
@@ -836,6 +860,7 @@ public client_putinserver(id) {
 	gs_enforcing_cvar[id][0] = 0
 	g_deferPending[id] = 0
 	g_deferPendingHi[id] = 0
+	g_deferCeiling[id] = 0
 	// v7.31: a new connection can beat the previous occupant's disconnect cleanup.
 	// Flush any Discord batch still buffered on this slot (sent under the previous
 	// occupant's stored identity) — this also clears the slot for the new player.
@@ -878,6 +903,7 @@ public client_disconnected(id) {
 	remove_task(id + TASK_DEFER_ENFORCE)  // deferred enforcement task
 	g_deferPending[id] = 0
 	g_deferPendingHi[id] = 0
+	g_deferCeiling[id] = 0
 	gb_FirstCheckComplete[id] = false
 	gb_initialCheckRunning[id] = false
 	gs_enforcing_cvar[id][0] = 0
@@ -1529,7 +1555,7 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	}
 
 	if (isInvalid) {
-		defer_enforcement(id, cvar_index, valueFromPlayer, calFloatValue)
+		defer_enforcement(id, cvar_index, valueFromPlayer, false)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
@@ -1543,10 +1569,10 @@ public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPl
 
 	if (valueFromPlayer < calFloatValue) {
 		// Below minimum — correct to minimum
-		defer_enforcement(id, cvar_index, valueFromPlayer, calFloatValue)
+		defer_enforcement(id, cvar_index, valueFromPlayer, false)
 	} else if (valueFromPlayer > altFloatValue) {
 		// Above maximum — correct to maximum
-		defer_enforcement(id, cvar_index, valueFromPlayer, altFloatValue)
+		defer_enforcement(id, cvar_index, valueFromPlayer, true)
 	} else {
 		// Cvar is valid - reset enforcement tracking for this cvar
 		fn_reset_enforce_tracking(id, cvar_index)
@@ -1558,7 +1584,7 @@ public fn_checkaltallowed(id, cvar_index, const s_CVARNAME[], Float: valueFromPl
  * Moves expensive work (get_user_*, log_amx, client_print broadcast) out of the
  * clc_cvarvalue2 opcode handler to prevent 160-185ms server frame freezes.
  */
-stock defer_enforcement(id, cvar_index, Float:valueFromPlayer, Float:calFloatValue) {
+stock defer_enforcement(id, cvar_index, Float:valueFromPlayer, bool:ceiling) {
 	// Set pending bit for this cvar index
 	if (cvar_index < 32)
 		g_deferPending[id] |= (1 << cvar_index)
@@ -1567,7 +1593,13 @@ stock defer_enforcement(id, cvar_index, Float:valueFromPlayer, Float:calFloatVal
 
 	// Store per-cvar data
 	g_deferValue[id][cvar_index] = valueFromPlayer
-	g_deferCalValue[id][cvar_index] = calFloatValue
+	if (cvar_index >= MIN_MAX_CVAR_START) {
+		new bit = 1 << (cvar_index - MIN_MAX_CVAR_START)
+		if (ceiling)
+			g_deferCeiling[id] |= bit
+		else
+			g_deferCeiling[id] &= ~bit
+	}
 	// Schedule for next frame (only if not already scheduled)
 	if (!task_exists(id + TASK_DEFER_ENFORCE))
 		set_task(0.0, "task_deferred_enforce", id + TASK_DEFER_ENFORCE)
@@ -1589,12 +1621,15 @@ public task_deferred_enforce(taskid) {
 		if (!pending)
 			continue
 
-		fn_enforce_cvar(id, idx, gs_cvars[idx],
-			g_deferValue[id][idx], g_deferCalValue[id][idx])
+		new bool:ceiling = false
+		if (idx >= MIN_MAX_CVAR_START)
+			ceiling = (g_deferCeiling[id] & (1 << (idx - MIN_MAX_CVAR_START))) != 0
+		fn_enforce_cvar(id, idx, gs_cvars[idx], g_deferValue[id][idx], ceiling)
 	}
 
 	g_deferPending[id] = 0
 	g_deferPendingHi[id] = 0
+	g_deferCeiling[id] = 0
 }
 
 // Reset enforcement tracking when cvar becomes valid
@@ -1609,9 +1644,24 @@ stock fn_reset_enforce_tracking(id, cvar_index) {
 // ENFORCEMENT & PUNISHMENT
 // ============================================================================
 
-stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, Float: calFloatValue) {
+stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, bool:ceiling) {
 	if (gb_StopChecking[id])
 		return PLUGIN_CONTINUE
+
+	// The correction is the bound's own table string, never a formatted float.
+	// AMXX's %f truncates instead of rounding, so 0.01 went out as "0.009", the
+	// client re-reported 0.009, 0.009 < 0.01, and after MAX_ENFORCE_ATTEMPTS the
+	// player was announced as blocking the value this plugin had just given them.
+	// Identical strings parse to identical floats, so the compares in
+	// fn_checkvalues / fn_checkaltallowed are exact without any tolerance. The
+	// same string goes into every message that tells the player what to type.
+	new required[CORRECTION_LEN]
+	if (cvar_index == M_PITCH_INDEX && valueFromPlayer < 0.0)
+		copy(required, charsmax(required), inverse_p)
+	else if (ceiling && cvar_index >= MIN_MAX_CVAR_START)
+		copy(required, charsmax(required), gs_altvalues[cvar_index - MIN_MAX_CVAR_START])
+	else
+		copy(required, charsmax(required), gs_calvalues[cvar_index])
 
 	// Skip hud_takesshots enforcement for non-competitive matches (12man, scrim, draft)
 	// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
@@ -1647,7 +1697,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_chat, "")
 			client_print(id, print_chat, "[KTP] ========== CVAR ENFORCEMENT BLOCKED ==========")
 			client_print(id, print_chat, "[KTP] You need to set cl_filterstuffcmd to 0")
-			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.2f, required: %.2f)", s_CVARNAME, valueFromPlayer, calFloatValue)
+			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.2f, required: %s)", s_CVARNAME, valueFromPlayer, required)
 			client_print(id, print_chat, "[KTP] Unless you change cl_filterstuffcmd to 0, or manually")
 			client_print(id, print_chat, "[KTP] adjust %s, you are unable to participate in this", s_CVARNAME)
 			client_print(id, print_chat, "[KTP] match by KTP rules.")
@@ -1662,11 +1712,11 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "")
 			client_print(id, print_console, "VIOLATION: %s", s_CVARNAME)
 			client_print(id, print_console, "  Your value:    %.3f", valueFromPlayer)
-			client_print(id, print_console, "  Required:      %.3f", calFloatValue)
+			client_print(id, print_console, "  Required:      %s", required)
 			client_print(id, print_console, "")
 			client_print(id, print_console, "TO FIX: Type in console:")
 			client_print(id, print_console, "  cl_filterstuffcmd 0")
-			client_print(id, print_console, "  %s %.3f", s_CVARNAME, calFloatValue)
+			client_print(id, print_console, "  %s %s", s_CVARNAME, required)
 			client_print(id, print_console, "")
 			client_print(id, print_console, "Until this is resolved, you cannot participate")
 			client_print(id, print_console, "in competitive matches per KTP rules.")
@@ -1674,8 +1724,8 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "")
 
 			// Log this escalation
-			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %.2f) after %d attempts",
-				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue, gi_enforce_attempts[id][cvar_index])
+			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %s) after %d attempts",
+				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, required, gi_enforce_attempts[id][cvar_index])
 
 			// Announce to all players that this player is blocked
 			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot participate until fixed", PLUGIN_NAME, gs_logname, s_CVARNAME)
@@ -1684,39 +1734,25 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 		return PLUGIN_CONTINUE
 	}
 
-	new bool:is_pitch = (cvar_index == M_PITCH_INDEX)
-
 	// Store enforced cvar name to prevent recursion (only skips this specific cvar's response)
 	copy(gs_enforcing_cvar[id], ENFORCE_CVAR_LEN - 1, s_CVARNAME)
 
-	// Force correct value on client
-	if (is_pitch && (valueFromPlayer < 0.0)) {
-		client_cmd(id, "%s %s", s_CVARNAME, inverse_p)
-	}
-	else if (is_pitch && (valueFromPlayer >= 0.0)) {
-		client_cmd(id, "%s %s", s_CVARNAME, gs_calvalues[M_PITCH_INDEX])
-	}
-	else if (calFloatValue >= 100.0) {
-		new intValue = floatround(calFloatValue, floatround_floor)
-		client_cmd(id, "%s %d", s_CVARNAME, intValue)
-	}
-	else {
-		client_cmd(id, "%s %.3f", s_CVARNAME, calFloatValue)
-	}
+	// Force correct value on client -- the table string, verbatim
+	client_cmd(id, "%s %s", s_CVARNAME, required)
 
 	// Log violation
-	log_amx("%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, valueFromPlayer, calFloatValue)
+	log_amx("%L", LANG_SERVER, "FCOS_LANG_LOG_ENTRY", gs_logauthid, gs_logname, gs_logip, s_CVARNAME, valueFromPlayer, required)
 
-	// Announce to all players (use integer format for large values like rate/cmdrate)
-	if (calFloatValue >= 100.0)
-		client_print(0, print_chat, "[%s] %s had invalid %s (%d) - corrected to %d", PLUGIN_NAME, gs_logname, s_CVARNAME, floatround(valueFromPlayer, floatround_floor), floatround(calFloatValue, floatround_floor))
+	// Announce to all players (integer format for the player's value on large cvars like rate/cmdrate)
+	if (gf_calvalues[cvar_index] >= 100.0)
+		client_print(0, print_chat, "[%s] %s had invalid %s (%d) - corrected to %s", PLUGIN_NAME, gs_logname, s_CVARNAME, floatround(valueFromPlayer, floatround_floor), required)
 	else
-		client_print(0, print_chat, "[%s] %s had invalid %s (%.3f) - corrected to %.3f", PLUGIN_NAME, gs_logname, s_CVARNAME, valueFromPlayer, calFloatValue)
+		client_print(0, print_chat, "[%s] %s had invalid %s (%.3f) - corrected to %s", PLUGIN_NAME, gs_logname, s_CVARNAME, valueFromPlayer, required)
 
 	// Buffer violation for grouped Discord notification
 	// Only if ktp_cvar_discord is enabled (disabled by default to reduce spam)
 	if (get_pcvar_num(gp_cvar_discord) && ktp_discord_is_enabled()) {
-		buffer_discord_violation(id, s_CVARNAME, valueFromPlayer, calFloatValue)
+		buffer_discord_violation(id, s_CVARNAME, valueFromPlayer, required)
 	}
 
 	return PLUGIN_CONTINUE
@@ -1731,7 +1767,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
  * Groups multiple violations per player into a single embed
  * Tracks repeat violations with count
  */
-stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:corrected_value) {
+stock buffer_discord_violation(id, const cvar_name[], Float:player_value, const corrected_value[]) {
 	// Slot reused inside the 5s batch window (disconnect + new connect on the
 	// same slot): the buffer still holds the previous occupant's violations under
 	// their authid. Flush that batch under its own identity before starting fresh
@@ -1765,13 +1801,13 @@ stock buffer_discord_violation(id, const cvar_name[], Float:player_value, Float:
 		// Existing cvar - increment count and update values
 		g_discordCvarCounts[id][cvar_index]++
 		g_discordCvarValues[id][cvar_index] = player_value
-		g_discordCvarCorrected[id][cvar_index] = corrected_value
+		copy(g_discordCvarCorrected[id][cvar_index], CORRECTION_LEN - 1, corrected_value)
 	} else if (g_discordViolationCount[id] < MAX_CVAR_VIOLATIONS) {
 		// New cvar - add to buffer
 		new n = g_discordViolationCount[id]
 		copy(g_discordCvarNames[id][n], MAX_CVAR_NAME_LEN - 1, cvar_name)
 		g_discordCvarValues[id][n] = player_value
-		g_discordCvarCorrected[id][n] = corrected_value
+		copy(g_discordCvarCorrected[id][n], CORRECTION_LEN - 1, corrected_value)
 		g_discordCvarCounts[id][n] = 1
 		g_discordViolationCount[id]++
 	}
@@ -1819,29 +1855,30 @@ flush_discord_violations(id) {
 		"**Player:** %s^n**SteamID:** %s^n**IP:** %s^n^n**Violations (%d total, %d unique):**^n",
 		g_discordPlayerName[id], g_discordPlayerAuthid[id], g_discordPlayerIp[id], total_violations, g_discordViolationCount[id])
 
-	// Add cvar list (use integer format for large values like rate/cmdrate)
+	// Add cvar list (integer format for the player's value on large cvars like rate/cmdrate;
+	// the corrected side is the table string and needs no formatting)
 	for (new i = 0; i < g_discordViolationCount[id] && pos < charsmax(description) - 100; i++) {
-		new bool:isLarge = (g_discordCvarCorrected[id][i] >= 100.0)
+		new bool:isLarge = (floatstr(g_discordCvarCorrected[id][i]) >= 100.0)
 		if (g_discordCvarCounts[id][i] > 1) {
 			if (isLarge)
 				pos += formatex(description[pos], charsmax(description) - pos,
-					"• **%s** (x%d): %d → %d^n",
+					"• **%s** (x%d): %d → %s^n",
 					g_discordCvarNames[id][i], g_discordCvarCounts[id][i],
-					floatround(g_discordCvarValues[id][i], floatround_floor), floatround(g_discordCvarCorrected[id][i], floatround_floor))
+					floatround(g_discordCvarValues[id][i], floatround_floor), g_discordCvarCorrected[id][i])
 			else
 				pos += formatex(description[pos], charsmax(description) - pos,
-					"• **%s** (x%d): %.3f → %.3f^n",
+					"• **%s** (x%d): %.3f → %s^n",
 					g_discordCvarNames[id][i], g_discordCvarCounts[id][i],
 					g_discordCvarValues[id][i], g_discordCvarCorrected[id][i])
 		} else {
 			if (isLarge)
 				pos += formatex(description[pos], charsmax(description) - pos,
-					"• **%s**: %d → %d^n",
+					"• **%s**: %d → %s^n",
 					g_discordCvarNames[id][i],
-					floatround(g_discordCvarValues[id][i], floatround_floor), floatround(g_discordCvarCorrected[id][i], floatround_floor))
+					floatround(g_discordCvarValues[id][i], floatround_floor), g_discordCvarCorrected[id][i])
 			else
 				pos += formatex(description[pos], charsmax(description) - pos,
-					"• **%s**: %.3f → %.3f^n",
+					"• **%s**: %.3f → %s^n",
 					g_discordCvarNames[id][i],
 					g_discordCvarValues[id][i], g_discordCvarCorrected[id][i])
 		}

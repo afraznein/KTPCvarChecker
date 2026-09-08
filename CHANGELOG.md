@@ -38,6 +38,73 @@ correctly reflected everywhere.
 - `/cvar` is registered for `say_team` too. Dropped "parallel" — the sweep chains
   one query per tick by design (the engine handles ~1 cvar callback per frame).
 
+## [7.38] - 2026-09-08
+
+### Fixed — the enforcement write-back sent a value that failed its own bound
+
+`fn_enforce_cvar` corrected a client with `client_cmd(id, "%s %.3f", name, bound)`.
+AMXX's formatter (`amxmodx/format.cpp`, `AddFloat`) truncates every digit —
+`val = (int)(fval / tmp)`, no rounding — so any bound whose float32 sits just
+under its decimal value went out one digit short. `0.01f` is `0.0099999998` and
+was sent as **`0.009`**; the client stored and re-reported `0.009`; `0.009 < 0.01`;
+and after `MAX_ENFORCE_ATTEMPTS` the player was announced fleet-wide as
+`FILTERSTUFF_BLOCKED` — for the value this plugin had just given them.
+
+The 7.22 "IEEE 754 float precision" change did not fix it. Moving the `ex_interp`
+floor `0.01 → 0.009` moved the problem: `0.009f` is `0.0089999996`, sent as
+**`0.008`**, still below the floor. `lightgamma 1.81 → 1.809` only worked because
+`1.809f` happens to round *up*. Measured on the fleet 2026-09-07: **100 of 285**
+`FILTERSTUFF_BLOCKED` lines name `ex_interp`.
+
+It is also FPU-dependent. KTPAMXX is built `-m32` with no `-mfpmath=sse`, so the
+formatter runs on x87 with 64-bit intermediates, where `tmp *= 0.1` accumulates
+differently: `0.5` prints as `0.499` and `89` as `88.999` — values that are exact
+in float32 and print correctly under SSE. `cl_bobup 0.5` started looping on the
+2026-07 core rebuild (11 corrections and BLOCKED lines across three hosts, none
+before); `cl_pitchdown`/`cl_pitchup 89` are the same shape, latent only because
+nobody has run them out of range. A core cut can move any bound from "safe" to
+"loops", which is why the gate below models both FPU modes.
+
+**The fix is the mechanism, not the values.** The write-back is now the bound's
+own table string — `gs_calvalues[]`, `gs_altvalues[]` or `inverse_p`, verbatim —
+which is what the `m_pitch` branch had already done by hand since 7.18. Identical
+strings parse to identical floats (`floatstr` is `(float)atof` on both sides), so
+the bare `<` / `>` and the `FLOAT_PRECISION` compares are exact at any magnitude
+and no tolerance is needed anywhere. The compare was never the bug; an epsilon
+would have excused `0.0095`, the wrong direction.
+
+- The defer queue carries **which** bound was crossed (one bit per range cvar in
+  `g_deferCeiling[]`, cleared with the pending masks on slot recycle, disconnect
+  and drain) instead of a float copy of the bound. `g_deferCalValue[]` is gone.
+- `fn_enforce_cvar` has one `Float:` parameter left — the player's own value — so
+  no format string in it *can* render a bound as a float.
+- The same string goes into every message that tells the player what to type:
+  the BLOCKED chat and console text, the audit log, the fleet announcement and the
+  Discord embed. The console instruction used to read `m_pitch 0.021`, and NY
+  logged 37 corrections consistent with players typing exactly that. The
+  player's *observed* value is still rendered with `%.2f`/`%.3f`; it is
+  informational, never something the player is told to type, and carrying the
+  raw string through the defer queue was not worth a per-slot string table.
+- `FCOS_LANG_LOG_ENTRY`'s KTP-value placeholder is `%s`.
+
+### Added — `tools/check_enforce_roundtrip.py`, run by the Source Invariants workflow
+
+Reads both tables out of the `.sma` and runs **every bound** through the write-back
+the source actually uses, on both FPU models, asserting each reparses to satisfy
+its own bound under the same predicate the Pawn applies (`FLOAT_PRECISION` or
+string-equal for exact cvars, bare compare for ranges). The formatter model is a
+transcription of `AddFloat` with per-operation rounding to a 53- or 64-bit
+significand, validated against a C build of the real function in `-m32`,
+`-mfpmath=387` and `-mfpmath=sse` modes, and pinned in CI to three measured
+outputs (`0.01 → 0.009`; `0.5 → 0.500` on SSE, `0.499` on x87) so a model that
+cannot reproduce production cannot vouch for it.
+
+Mutation-tested: against the 7.37 source it fails 18 checks, four of them
+round-trip rows (`ex_interp`, `cl_bobup`, `cl_pitchdown`, `cl_pitchup` — `m_pitch`
+was already a string there); with only the `client_cmd` reverted to `%.3f`/`%d`
+on top of this change it fails 8, six of them rows (both `m_pitch` signs join).
+The full table is printed on every run.
+
 ## [7.37] - 2026-08-30
 
 Clears the four follow-ups recorded in #8's review. Three were real and are
