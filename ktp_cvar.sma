@@ -30,6 +30,9 @@
  *                      (it truncated to "0.008"); with the string write-back
  *                      the intended value round-trips. One packet at
  *                      cl_updaterate's floor, held by check_interp_pairing.py
+ *                    * REMOVED: cl_nopred / cl_nodelta observe-only queries --
+ *                      the DoD client answers "Bad CVAR request" to both, on
+ *                      every query ever sent (4,446 of 4,446 in the fleet logs)
  *   7.37 2026-08-30 - ex_interp pairing check compares against the EFFECTIVE
  *                      packet interval, not the requested one. The engine
  *                      floors a sub-10 cl_updaterate to 0.1s, then clamps into
@@ -575,7 +578,7 @@ new gp_cvar_silent_tier_secs
 // Kept OUT of gs_cvars deliberately -- everything in that array is validated
 // against gs_calvalues and corrected, and these have no defensible enforced
 // value. The point is to see what players run, not to make them run something.
-#define OBSERVE_CVARS_COUNT 3
+#define OBSERVE_CVARS_COUNT 1
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
 new gi_netRate[MAX_PLAYERS + 1]        // cache only -- never gate on its value
@@ -597,7 +600,9 @@ new gp_cvar_sv_maxupdaterate
 // until a rotation tick reads it.
 new bool:gb_infoDirty[MAX_PLAYERS + 1]
 
-new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_nopred", "cl_cmdbackup", "cl_nodelta" }
+// cl_nopred and cl_nodelta were queried here from 7.34 to 7.37 and answered
+// "Bad CVAR request" every single time -- the DoD client does not register them.
+new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_cmdbackup" }
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
 // globals survive the changelevel — a name compare stays silent for exactly
@@ -1299,7 +1304,7 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 // NETCODE OBSERVATION (v7.34/7.35) — log-only, enforces nothing.
 //   * rate / cl_updaterate sampled from userinfo at settle, changes logged
 //   * ex_interp vs 1/cl_updaterate pairing, fed by the existing query rotation
-//   * cl_nopred / cl_cmdbackup / cl_nodelta queried once, outside gs_cvars
+//   * cl_cmdbackup queried once, outside gs_cvars
 // ============================================================================
 
 // Reads the two netcode keys the engine parses out of userinfo. These are the

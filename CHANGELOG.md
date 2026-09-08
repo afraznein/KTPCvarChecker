@@ -132,6 +132,13 @@ was already a string there); with only the `client_cmd` reverted to `%.3f`/`%d`
 on top of this change it fails 8, six of them rows (both `m_pitch` signs join).
 The full table is printed on every run.
 
+### Removed — `cl_nopred` / `cl_nodelta` observe-only queries
+
+Both answered `Bad CVAR request` on **4,446 of 4,446** observe queries in the
+fleet logs: the DoD client does not register them, so the query cost two
+round-trips per settle and logged nothing. `cl_cmdbackup` stays. Behaviour-neutral
+for every player.
+
 ## [7.37] - 2026-08-30
 
 Clears the four follow-ups recorded in #8's review. Three were real and are
