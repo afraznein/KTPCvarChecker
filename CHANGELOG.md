@@ -2,6 +2,19 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.39
+
+**`cl_bob` ceiling 0.011 -> 0.01.** Operator ruling 2026-09-09. The enforced upper bound in
+`gs_altvalues` was 0.011; it is now 0.01.
+
+The 7.35 note below argued the ceiling should stay 0.011 because the question was a truncation
+one rather than a precision one. That reasoning is superseded by the ruling, not refuted -- it is
+left in place because it explains why the value sat where it did.
+
+**Nobody is corrected by this today.** `cl_bob` corrections recorded across the fleet: zero, ever;
+the published default is 0.005, well under both bounds. The change closes the gap between the
+enforced ceiling and the published one rather than altering anyone's play.
+
 ## [Unreleased]
 
 ### Removed — stale tracked plugin binary

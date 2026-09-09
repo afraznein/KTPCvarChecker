@@ -1,6 +1,6 @@
 # KTP Cvar Checker
 
-**Version 7.38** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.39** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
 Pure enforcement anti-cheat that monitors 37 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
@@ -55,7 +55,7 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 
 **Standard (22):** `cl_bobcycle`, `cl_bobup`, `cl_showevents`, `fastsprites`, `gl_clear`, `gl_d3dflip`, `gl_nobind`, `gl_playermip`, `hud_takesshots`, `r_drawviewmodel`, `r_dynamic`, `s_show`, `cl_pitchspeed`, `cl_yawspeed`, `cl_anglespeedkey`, `m_side`, `r_glowshellfreq`, `r_traceglow`, `texgamma`, `lightgamma`, `cl_bob`, `fps_max`
 
-**Range cvars (7):** `lightgamma` (1.809-3), `cl_bob` (0-0.011), `cl_updaterate` (100-120), `cl_cmdrate` (100-1000), `rate` (locked 100000), `ex_interp` (0.01-0.05), `fps_max` (60-750).
+**Range cvars (7):** `lightgamma` (1.809-3), `cl_bob` (0-0.01), `cl_updaterate` (100-120), `cl_cmdrate` (100-1000), `rate` (locked 100000), `ex_interp` (0.01-0.05), `fps_max` (60-750).
 
 ## Requirements
 
