@@ -2,10 +2,11 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.38
+ *   Current Version:   7.39
  *   Release Date:      2026-09-08
  *
  *   Changelog:
+ *   7.39 2026-09-09 - cl_bob ceiling 0.011 -> 0.01 (operator ruling).
  *   7.38 2026-09-08 - Enforcement write-back sends the bound's own table string.
  *                      AMXX's %f truncates instead of rounding, so a bound whose
  *                      float32 sits just under its decimal value went out one
@@ -273,7 +274,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.38"
+#define PLUGIN_VERSION "7.39"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -493,7 +494,7 @@ new gs_calvalues[TOTAL_CVARS][] = {
 // Range cvar upper bounds (paired with gs_calvalues lower bounds for indices >= MIN_MAX_CVAR_START).
 // Index → range cvar:
 //   0: lightgamma  (cal=1.809 → alt=3)
-//   1: cl_bob      (cal=0     → alt=0.011)
+//   1: cl_bob      (cal=0     → alt=0.01)
 //   2: cl_updaterate (cal=100 → alt=120)
 //   3: cl_cmdrate  (cal=100   → alt=1000)   v7.25: was 500, raised to enable input-resolution testing
 //   4: rate        (cal=alt=100000, locked single value)
@@ -501,7 +502,7 @@ new gs_calvalues[TOTAL_CVARS][] = {
 //                                          never derived per client -- tools/check_interp_pairing.py holds it
 //   6: fps_max     (cal=60    → alt=750)
 new gs_altvalues[ALT_VALUES_COUNT][] = {
-"3", "0.011", "120", "1000", "100000", "0.05", "750"
+"3", "0.01", "120", "1000", "100000", "0.05", "750"
 }
 
 // Pre-converted float arrays (performance optimization)
