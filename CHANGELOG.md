@@ -2,6 +2,49 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.41
+
+**A client blocking cvar corrections can no longer ready up for a match.** Operator ruling
+2026-09-13. Until now the BLOCKED branch warned the player and announced "cannot participate until
+fixed", and nothing enforced it. This plugin now reports the state; KTPMatchHandler (0.10.172)
+refuses `.ready` on it. Scrims and pubs are unaffected, and that scope is the match handler's
+setting (`ktp_blocked_cvar_match_types`), not this plugin's.
+
+- **Added `ktp_cvar_get_blocked(id, cvar[], cvarLen, required[], requiredLen)`** and the
+  `ktp_cvar_checker` library, registered in `plugin_natives`. It returns how many enforced cvars the
+  player is blocking and fills in the first one's name and the value to type. A player is blocked from
+  the moment the BLOCKED branch fires until that cvar answers in range (a hand fix clears it on the
+  next query) or the player disconnects. Bots and HLTV are never reported.
+- **Blocks survive a map change for the same player.** Halftime and every OT round change level,
+  and `client_putinserver` used to clear the state, so a blocked player could ready in the first
+  10-50 s of the next half before three wrong answers flagged them again. `client_disconnected`
+  (now reading `drop`) keeps the blocked cvars when `drop` is false (a map change, per KTPAMXX
+  `SV_InactivateClients_RH`) and records the authid; `client_putinserver` keeps them only for that
+  authid. A real disconnect (`drop` true, `SV_DropClient`) or a different player clears everything,
+  as before. A carried block still clears on that cvar's next in-range answer, so it cannot outlive
+  a fix by more than one query cycle. Shared authids (`STEAM_ID_LAN`, `VALVE_ID_LAN`,
+  `STEAM_ID_PENDING`) never carry, since they cannot tell two players apart.
+- **`hud_takesshots`' competitive-only gate moved into `fn_takesshots_exempt()`**, called by both
+  `fn_enforce_cvar` and the native. A player blocked on it during a competitive match is not reported
+  once `ktp_match_competitive` drops to 0, the same moment enforcement stops.
+- **The BLOCKED branch records the value it told the player to type** (`gs_blockedRequired`), so the
+  match handler shows the same string.
+- **Text.** Once blocked, this plugin stops re-sending the correction, so `cl_filterstuffcmd 0` on its
+  own leaves the value wrong. The chat lines now give both commands and say the match plugin refuses
+  `.ready` (`cl_filterstuffcmd 0; <cvar> <value>`, which works typed as shown); the console and
+  broadcast lines say "cannot ready for a match" rather than "cannot participate". The `%.6f`
+  player-value lines are unchanged.
+- **A wrong BLOCKED now costs more.** It used to be a chat line; it now keeps the player out of
+  matches until the cvar answers in range. A cvar the client does not register answers
+  `Bad CVAR request` (0.0) forever, which is the 7.40 class. Before staging, check the fleet logs for
+  `FILTERSTUFF_BLOCKED` spread across many SteamIDs on one cvar. The match-side kill switch is
+  `ktp_blocked_cvar_match_types 0`.
+- **New CI gate `tools/check_blocked_bridge.py`** (Source Invariants): the library, native and title
+  names the handler looks up, the native reading the flag through the shared gate, the BLOCKED branch
+  recording the value, and the flag being cleared at exactly connect, disconnect and the in-range
+  answer. Each rule has a mutation control that must fail. `check_published_cvars.py` now reads the
+  `hud_takesshots` tokens from `fn_takesshots_exempt`.
+
 ## 7.40
 
 **Removed five enforced cvars the DoD client does not have:** `fastsprites`, `gl_nobind`,

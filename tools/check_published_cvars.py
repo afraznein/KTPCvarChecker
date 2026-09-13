@@ -75,7 +75,8 @@ BEHAVIOURS = {
     ),
     "HUD_TAKESSHOTS_INDEX": Behaviour(
         cvar="hud_takesshots",
-        function="fn_enforce_cvar",
+        # fn_enforce_cvar reaching this helper is held by check_blocked_bridge.py.
+        function="fn_takesshots_exempt",
         tokens=("HUD_TAKESSHOTS_INDEX", "ktp_match_competitive"),
         prose=(r"competitive", r"\.ktp\b"),
         also_accepted=None,

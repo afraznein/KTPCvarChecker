@@ -32,3 +32,5 @@ jobs:
         run: python3 tools/check_enforce_roundtrip.py
       - name: cvar table positions and absent-client refusals (v7.40)
         run: python3 tools/check_cvar_tables.py
+      - name: blocked-cvar bridge for KTPMatchHandler (v7.41)
+        run: python3 tools/check_blocked_bridge.py

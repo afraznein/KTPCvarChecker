@@ -35,12 +35,16 @@ public fn_checkvalues(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	}
 }
 
+stock bool:fn_takesshots_exempt(cvar_index) {
+	if (cvar_index != HUD_TAKESSHOTS_INDEX)
+		return false
+	if (!gp_cvar_match_competitive)
+		gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
+	return gp_cvar_match_competitive && get_pcvar_num(gp_cvar_match_competitive) == 0
+}
+
 stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer, bool:ceiling) {
-	if (cvar_index == HUD_TAKESSHOTS_INDEX) {
-		if (!gp_cvar_match_competitive)
-			gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
-		if (gp_cvar_match_competitive && get_pcvar_num(gp_cvar_match_competitive) == 0)
-			return PLUGIN_CONTINUE
-	}
+	if (fn_takesshots_exempt(cvar_index))
+		return PLUGIN_CONTINUE
 	return PLUGIN_CONTINUE
 }
