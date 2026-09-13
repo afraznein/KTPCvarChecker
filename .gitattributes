@@ -2,3 +2,7 @@
 # "$'': command not found" -- so pin LF regardless of core.autocrlf on the
 # clone. The blob is already LF; this stops a Windows working tree undoing it.
 *.sh text eol=lf
+
+# The fleet runs this file with CRLF endings, and the distributor overwrites it whole, so keep the
+# committed bytes identical to the live copy.
+data/lang/ktp_cvar.txt -text
