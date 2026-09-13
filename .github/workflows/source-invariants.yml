@@ -30,3 +30,5 @@ jobs:
         run: python3 tools/check_interp_pairing.py
       - name: enforcement write-back round trip (v7.38)
         run: python3 tools/check_enforce_roundtrip.py
+      - name: cvar table positions and absent-client refusals (v7.40)
+        run: python3 tools/check_cvar_tables.py

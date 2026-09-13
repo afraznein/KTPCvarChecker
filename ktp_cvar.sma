@@ -2,10 +2,18 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.39
- *   Release Date:      2026-09-08
+ *   Current Version:   7.40
+ *   Release Date:      2026-09-12
  *
  *   Changelog:
+ *   7.40 2026-09-12 - Removed fastsprites, gl_nobind, gl_nocolors, gl_playermip
+ *                      and r_luminance. The DoD client does not register them:
+ *                      it answers "Bad CVAR request", which parses to 0.0 and
+ *                      matched the enforced 0, so these passed on every client
+ *                      and enforced nothing.
+ *                    * FIXED: BLOCKED chat, console and FILTERSTUFF_BLOCKED log
+ *                      lines render the player's value with %.6f (was %.2f /
+ *                      %.3f, so 0.008999 logged as 0.00)
  *   7.39 2026-09-09 - cl_bob ceiling 0.011 -> 0.01 (operator ruling).
  *   7.38 2026-09-08 - Enforcement write-back sends the bound's own table string.
  *                      AMXX's %f truncates instead of rounding, so a bound whose
@@ -274,7 +282,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.39"
+#define PLUGIN_VERSION "7.40"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -293,18 +301,16 @@ new const inverse_p[] = "-0.022";
 new const Float: FLOAT_PRECISION = 0.00005;
 
 // Array size constants
-#define TOTAL_CVARS 37
-#define MIN_MAX_CVAR_START 30
+#define TOTAL_CVARS 32
+#define MIN_MAX_CVAR_START 25
 #define ALT_VALUES_COUNT 7
 
 // Enforcement cvar name length
 #define ENFORCE_CVAR_LEN 32
 
-// Cvar indices in gs_cvars[] array — must match array positions
-// v7.25: shifted down by 2 after cl_lc/cl_lw removal (was 16, 17)
-// v7.30: shifted down 1 more after cl_mousegrab removal (were 14, 15)
-#define HUD_TAKESSHOTS_INDEX 13
-#define M_PITCH_INDEX 14
+// Positions in gs_cvars[]; tools/check_cvar_tables.py fails CI if they drift.
+#define HUD_TAKESSHOTS_INDEX 9
+#define M_PITCH_INDEX 10
 
 // Priority-based monitoring intervals (1 query per tick due to engine limitation)
 // v7.27: priority interval 0.5 → 0.3s to absorb the 8 promoted visual cvars —
@@ -314,8 +320,7 @@ new const Float: FLOAT_PRECISION = 0.00005;
 #define STANDARD_CHECK_INTERVAL 1.0   // Standard cvar rotation: full cycle = gi_standardCvarCount * this
 #define INITIAL_SWEEP_INTERVAL  0.3   // Initial-sweep query spacing (README/CHANGELOG timing math keys off this)
 
-// Priority cvar count (v7.27: 7 → 15 with the visual-cheat set promoted)
-#define PRIORITY_CVARS_COUNT 15
+#define PRIORITY_CVARS_COUNT 13
 
 // Discord notification grouping
 #define DISCORD_DELAY 5.0          // Delay to batch violations before sending Discord
@@ -363,7 +368,7 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 // Uses per-cvar bitmask to queue multiple violations per player per frame
 #define TASK_DEFER_ENFORCE 3000
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
-new g_deferPendingHi[MAX_PLAYERS + 1]      // bits 0-4: cvar indices 32-36
+new g_deferPendingHi[MAX_PLAYERS + 1]      // cvar indices from 32 up
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
 // Which bound a range cvar crossed, bit (cvar_index - MIN_MAX_CVAR_START): set
 // means the ceiling (correction is gs_altvalues[]), clear means the floor
@@ -420,19 +425,22 @@ new bool:g_discordPending[MAX_PLAYERS + 1]
 new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 "m_pitch", "cl_pitchdown", "cl_pitchup", "cl_updaterate", "cl_cmdrate",
 "rate", "ex_interp",
-"r_fullbright", "r_lightmap", "r_luminance", "gl_monolights", "gl_nocolors",
-"gl_overbright", "gl_picmip", "r_drawentities"
+"r_fullbright", "r_lightmap", "gl_monolights", "gl_overbright", "gl_picmip",
+"r_drawentities"
 }
 
 // All cvars (for initial check and reference)
-// Indices 0-29: exact value cvars, indices 30-36: range cvars (min/max)
+// Exact-value cvars first, then range cvars from MIN_MAX_CVAR_START to the end.
+//
+// Every entry must be a cvar the DoD client actually registers. One it lacks
+// answers "Bad CVAR request", which parses to 0.0 and silently passes a rule of 0.
 //
 // v7.24 (2026-04-28): re-added 7 cvars dropped in v7.13 (2026-02-17) under the
 // false rationale "engine-limited values." All actually register with
 // `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
-// freely settable client-side. Indices 22-25 (keyboard-look — defeats
-// alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
-// indices 26-28 (visual-class — gl_picmip enforced at 0 defeats picmip
+// freely settable client-side. The keyboard-look set (cl_pitchspeed through
+// m_side — defeats alias-based no-recoil pulse scripts at cl_pitchspeed=9999 +
+// 1000fps) and the visual set (gl_picmip through r_traceglow — gl_picmip enforced at 0 defeats picmip
 // wallhack; r_glowshellfreq enforced at 2.2 = DoD default for integrity
 // check only; r_traceglow enforced at 0 = its actual default).
 //
@@ -464,10 +472,10 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 // HUD_TAKESSHOTS/M_PITCH indices −1, STANDARD_CVARS_COUNT 23→22.
 new gs_cvars[TOTAL_CVARS][] = {
 "cl_bobcycle", "cl_bobup",
-"cl_pitchdown", "cl_pitchup", "cl_showevents", "fastsprites", "gl_clear",
-"gl_d3dflip", "gl_monolights", "gl_nobind", "gl_nocolors", "gl_overbright",
-"gl_playermip", "hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
-"r_dynamic", "r_fullbright", "r_lightmap", "r_luminance", "s_show",
+"cl_pitchdown", "cl_pitchup", "cl_showevents", "gl_clear",
+"gl_d3dflip", "gl_monolights", "gl_overbright",
+"hud_takesshots", "m_pitch", "r_drawentities", "r_drawviewmodel",
+"r_dynamic", "r_fullbright", "r_lightmap", "s_show",
 "cl_pitchspeed", "cl_yawspeed", "cl_anglespeedkey", "m_side",
 "gl_picmip", "r_glowshellfreq", "r_traceglow",
 "texgamma", "lightgamma", "cl_bob", "cl_updaterate",
@@ -482,9 +490,10 @@ new gi_standardCvarIdx[TOTAL_CVARS]
 new gi_standardCvarCount
 
 new gs_calvalues[TOTAL_CVARS][] = {
-"0.8", "0.5", "89", "89", "0", "0", "0",
-"0", "0", "0", "0", "0", "0", "1", "0.022", "1", "1",
-"1", "0", "0", "0", "0",
+"0.8", "0.5", "89", "89", "0", "0",
+"0", "0", "0",
+"1", "0.022", "1", "1",
+"1", "0", "0", "0",
 "225", "210", "0.67", "0.8",
 "0", "2.2", "0",                  // gl_picmip, r_glowshellfreq, r_traceglow — see v7.26 note above for r_glowshellfreq=2.2 rationale
 "2", "1.809", "0", "100",
@@ -587,7 +596,7 @@ new gi_netUpdaterate[MAX_PLAYERS + 1]  // cache only -- never gate on its value
 new bool:gb_netobsSampled[MAX_PLAYERS + 1]
 new Float:gf_netInterp[MAX_PLAYERS + 1]     // last ex_interp seen via the QUERY path
 new bool:gb_netInterpSeen[MAX_PLAYERS + 1]
-new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried ~4.5s
+new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried every priority cycle
 new gi_exInterpIdx                           // derived; -1 if ex_interp leaves gs_cvars
 // Engine-owned rate clamp, resolved lazily -- 0 means "not found", which the
 // reader turns into "no clamp" rather than a runtime error on a null pcvar.
@@ -638,7 +647,7 @@ public plugin_init() {
 	gp_cvar_silent_tier_secs = register_cvar("ktp_cvar_silent_tier_secs", "90.0")
 
 	// Map full-list indexes to tiers once — name-compare at init avoids any
-	// ordering dependency on the trie build (15x38 compares, one time).
+	// ordering dependency on the trie build (a one-time nested compare).
 	for (new p = 0; p < PRIORITY_CVARS_COUNT; p++) {
 		for (new i = 0; i < TOTAL_CVARS; i++) {
 			if (equal(gs_priority_cvars[p], gs_cvars[i])) {
@@ -656,9 +665,9 @@ public plugin_init() {
 
 	// A short count means a gs_priority_cvars entry matched nothing in gs_cvars
 	// (typo, or a rename applied to one list only). The real cvar then falls into
-	// the standard tier instead of priority -- silently demoted from a ~4.5s
-	// check to a ~22s one -- and the priority rotation burns one of its 15 slots
-	// querying a name no client has.
+	// the standard tier instead of priority -- silently demoted to the slow
+	// rotation -- and the priority rotation burns a slot querying a name no
+	// client has.
 	if (gi_standardCvarCount != TOTAL_CVARS - PRIORITY_CVARS_COUNT) {
 		log_amx("[%s] CVAR TIER MISMATCH: %d standard, expected %d -- a priority name does not exist in gs_cvars",
 			PLUGIN_NAME, gi_standardCvarCount, TOTAL_CVARS - PRIORITY_CVARS_COUNT)
@@ -1401,7 +1410,7 @@ stock fn_netobs_eval_interp(id) {
 	new Float:need = fn_netobs_effective_interval(updaterate)
 	new bool:low = (gf_netInterp[id] < need - INTERP_EPSILON)
 
-	// ex_interp rides the ~4.5s priority rotation, so only TRANSITIONS log --
+	// ex_interp rides the priority rotation, so only TRANSITIONS log --
 	// otherwise one mis-set client writes ~13 lines a minute, forever.
 	if (low == gb_netInterpWarned[id])
 		return
@@ -1710,7 +1719,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_chat, "")
 			client_print(id, print_chat, "[KTP] ========== CVAR ENFORCEMENT BLOCKED ==========")
 			client_print(id, print_chat, "[KTP] You need to set cl_filterstuffcmd to 0")
-			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.2f, required: %s)", s_CVARNAME, valueFromPlayer, required)
+			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.6f, required: %s)", s_CVARNAME, valueFromPlayer, required)
 			client_print(id, print_chat, "[KTP] Unless you change cl_filterstuffcmd to 0, or manually")
 			client_print(id, print_chat, "[KTP] adjust %s, you are unable to participate in this", s_CVARNAME)
 			client_print(id, print_chat, "[KTP] match by KTP rules.")
@@ -1724,7 +1733,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "This is typically caused by cl_filterstuffcmd 1")
 			client_print(id, print_console, "")
 			client_print(id, print_console, "VIOLATION: %s", s_CVARNAME)
-			client_print(id, print_console, "  Your value:    %.3f", valueFromPlayer)
+			client_print(id, print_console, "  Your value:    %.6f", valueFromPlayer)
 			client_print(id, print_console, "  Required:      %s", required)
 			client_print(id, print_console, "")
 			client_print(id, print_console, "TO FIX: Type in console:")
@@ -1736,8 +1745,8 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "==================================================")
 			client_print(id, print_console, "")
 
-			// Log this escalation
-			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %s) after %d attempts",
+			// %.6f: AMXX's %f truncates, and at %.2f a player stuck at 0.008999 logged as 0.00.
+			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.6f (required %s) after %d attempts",
 				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, required, gi_enforce_attempts[id][cvar_index])
 
 			// Announce to all players that this player is blocked

@@ -258,7 +258,77 @@ def part1(src: str) -> dict:
               "lang FCOS_LANG_LOG_ENTRY", "the KTP-value placeholder must be %s, not %f")
     except OSError as e:
         check(False, "lang file", f"{lang}: {e}")
+
+    check_blocked_precision(src, enforce)
     return mech
+
+
+def calls_rendering(region: str, arg: str) -> list[tuple[str, str]]:
+    """(format string, conversion spec) for every log_amx/client_print in `region` passing `arg`.
+
+    Calls are paren-matched rather than read line by line: the FILTERSTUFF_BLOCKED
+    log_amx puts its format on one line and its arguments on the next.
+    """
+    out = []
+    for m in re.finditer(r"\b(?:log_amx|client_print)\s*\(", region):
+        depth, i, in_str = 0, m.end() - 1, False
+        for j in range(i, len(region)):
+            ch = region[j]
+            if ch == '"' and region[j - 1] != "\\":
+                in_str = not in_str
+            elif not in_str and ch == "(":
+                depth += 1
+            elif not in_str and ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        call = region[i + 1:j]
+        fm = re.search(r'"((?:[^"\\]|\\.)*)"', call)
+        if not fm:
+            continue
+        args = [a.strip() for a in call[fm.end():].split(",")[1:]]
+        specs = [s for s in FMT_SPEC.finditer(fm.group(1)) if s.group(0) != "%%"]
+        for k, a in enumerate(args):
+            if a == arg and k < len(specs):
+                out.append((fm.group(1), specs[k].group(0)))
+    return out
+
+
+def blocked_precision_problems(src: str, enforce: str) -> tuple[int, list[str]]:
+    """(calls found, problems) for the player's value in the BLOCKED branch."""
+    start = enforce.find(">= MAX_ENFORCE_ATTEMPTS")
+    end = enforce.find("client_cmd(", start)
+    if start < 0 or end < 0:
+        return 0, ["BLOCKED branch not found in fn_enforce_cvar -- the precision check is blind"]
+    decimals = [len(v.split(".")[1]) for name in ("gs_calvalues", "gs_altvalues")
+                for v in table(src, name) if "." in v]
+    need = max(decimals, default=0) + 3
+    found = calls_rendering(enforce[start:end], "valueFromPlayer")
+    problems = []
+    for fmt, spec in found:
+        m = re.fullmatch(r"%[-+ 0#]*\d*\.(\d+)f", spec)
+        if not m or int(m.group(1)) < need:
+            problems.append(f'"{fmt}" renders valueFromPlayer as {spec}; need %.{need}f or finer')
+    return len(found), problems
+
+
+def check_blocked_precision(src: str, enforce: str) -> None:
+    # At %.2f a player stuck at 0.008999 logged as 0.00: the digit that decided the
+    # verdict was the one the line dropped. Three digits past the longest bound
+    # keeps it visible through AMXX's truncating %f.
+    found, problems = blocked_precision_problems(src, enforce)
+    check(found > 0, "CONTROL BLOCKED precision probe",
+          "no log_amx/client_print in the BLOCKED branch renders valueFromPlayer -- blind")
+    check(any("FILTERSTUFF_BLOCKED" in f for f, _ in calls_rendering(enforce, "valueFromPlayer")),
+          "CONTROL BLOCKED precision probe", "the FILTERSTUFF_BLOCKED log_amx was not extracted")
+    for p in problems:
+        check(False, "BLOCKED line precision", p)
+    reverted = re.sub(r"(FILTERSTUFF_BLOCKED:[^\"]*stuck at )%\.\d+f", r"\g<1>%.2f", enforce)
+    # Not gated on reverted != enforce: a source already at %.2f must still pass
+    # this control, and a regex that stopped matching must not.
+    check(blocked_precision_problems(src, reverted)[1] != [],
+          "CONTROL BLOCKED precision discriminates",
+          "FILTERSTUFF_BLOCKED at %.2f is not caught -- the format regex no longer matches")
 
 
 # ===========================================================================

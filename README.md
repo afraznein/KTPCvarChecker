@@ -1,8 +1,8 @@
 # KTP Cvar Checker
 
-**Version 7.39** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
+**Version 7.40** - Priority-based client cvar enforcement for competitive Day of Defeat servers.
 
-Pure enforcement anti-cheat that monitors 37 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
+Pure enforcement anti-cheat that monitors 32 client cvars using periodic queries through KTPAMXX's `client_cvar_changed` callback. Automatically corrects violations with optional Discord alerts. No punishments — just auto-correction and logging.
 
 Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
@@ -10,8 +10,8 @@ Originally based on SubStream's "Force CAL Open Settings" (fcos).
 
 ```
 KTP Cvar Checker: queries cvars periodically
-     |  Priority (15 cvars: netcode + visual-cheat): 1 cvar every 0.3s
-     |  Standard (22 cvars): 1 cvar every 1.0s
+     |  Priority (13 cvars: netcode + visual-cheat): 1 cvar every 0.3s
+     |  Standard (19 cvars): 1 cvar every 1.0s
      v
 Game Client: responds with current cvar value
      v
@@ -26,15 +26,15 @@ KTP Cvar Checker: validates, enforces, logs, Discord alert
 
 | Type | Count | Interval | Worst-Case Detection |
 |------|-------|----------|---------------------|
-| Priority cvars | 15 | 1 per 0.3s | ~4.5 seconds |
-| Standard cvars | 22 | 1 per 1.0s | ~22 seconds |
-| Initial check | All 37 | 1 per 0.3s, starts 1.0s after connect, priority-first | priority ≤ ~5.5s, full ~12.1s |
+| Priority cvars | 13 | 1 per 0.3s | ~3.9 seconds |
+| Standard cvars | 19 | 1 per 1.0s | ~19 seconds |
+| Initial check | All 32 | 1 per 0.3s, starts 1.0s after connect, priority-first | priority ≤ ~4.9s, full ~10.6s |
 
 Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback per client frame).
 
 ## Features
 
-- **Priority-based monitoring** — Netcode + visual-cheat cvars (fullbright/picmip class) cycle every ~4.5 seconds
+- **Priority-based monitoring** — Netcode + visual-cheat cvars (fullbright/picmip class) cycle every ~3.9 seconds
 - **Automatic correction** — Forces correct values immediately on violation
 - **Discord notifications** — Grouped violations per player with 5-second batching window
 - **cl_filterstuffcmd detection** — Warns players after 3 failed enforcement attempts
@@ -46,14 +46,14 @@ Performance: ~4.3 queries/sec per player (the engine processes ~1 cvar callback 
 - **Interp pairing check (v7.35, corrected v7.37)** — `NETOBS_INTERP_LOW` when `ex_interp` is below one packet interval, `NETOBS_INTERP_OK` on recovery. Until v7.38 the enforced ranges (`cl_updaterate` 100-120, `ex_interp` 0.009-0.05) let a client satisfy both rules while the pair is inconsistent, because every cvar is otherwise validated in isolation; with the `ex_interp` floor at `0.01` (one packet at `cl_updaterate`'s floor, held by `tools/check_interp_pairing.py`) an in-band pair can no longer be low, so the check now only fires for a client between arrival and correction. Costs no extra queries — `ex_interp` is already a priority cvar — and only transitions log. The interval compared against is the **engine-effective** one, not `1/cl_updaterate`: the engine floors a sub-10 request to 0.1s and clamps into `[1/sv_maxupdaterate, 1/sv_minupdaterate]`, so an uncorrected client at `cl_updaterate 200` is judged against `1/120`, not `1/200` (v7.35 divided by the request and missed exactly that population). The clamp cuts both ways: with `sv_minupdaterate 90` a client at `cl_updaterate 20` is served every `1/90`s rather than the `0.05`s it asked for, so v7.35 also reported healthy `ex_interp` values as low
 - **Observe-only cvars (v7.35)** — `cl_cmdbackup` queried once at settle and logged as `NETOBS_CVAR`. Held outside `gs_cvars` on purpose: it is observed, never enforced, and never counted toward the silent-client tripwire. `cl_nopred` and `cl_nodelta` were dropped in v7.38: the DoD client does not register them and answered `Bad CVAR request` to every query
 - **Exact enforcement write-back (v7.38)** — a correction is sent as the bound's own table string (`ex_interp 0.01`), never a formatted float. AMXX's `%f` truncates rather than rounds, so `0.01` went out as `0.009`, the client re-reported `0.009`, and after three attempts the player was announced as blocking enforcement for the value the plugin had just given them; on the x87 core even exact values (`cl_bobup 0.5` → `0.499`, `cl_pitchup 89` → `88.999`) looped. Identical strings parse to identical floats, so the compare is exact with no tolerance. `tools/check_enforce_roundtrip.py` runs every bound through the round trip in CI on both FPU models
-- **Manual check** — `/cvar` (say or say_team) triggers a full 37-cvar sweep, priority-first (~12.1s)
+- **Manual check** — `/cvar` (say or say_team) triggers a full 32-cvar sweep, priority-first (~10.6s)
 - **Complete audit trail** — AMX logs with SteamID, name, IP, cvar, values
 
-## Monitored Cvars (37 total)
+## Monitored Cvars (32 total)
 
-**Priority (15):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, plus the visual-cheat set: `r_fullbright`, `r_lightmap`, `r_luminance`, `gl_monolights`, `gl_nocolors`, `gl_overbright`, `gl_picmip`, `r_drawentities`
+**Priority (13):** `m_pitch`, `cl_pitchdown`, `cl_pitchup`, `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp`, plus the visual-cheat set: `r_fullbright`, `r_lightmap`, `gl_monolights`, `gl_overbright`, `gl_picmip`, `r_drawentities`
 
-**Standard (22):** `cl_bobcycle`, `cl_bobup`, `cl_showevents`, `fastsprites`, `gl_clear`, `gl_d3dflip`, `gl_nobind`, `gl_playermip`, `hud_takesshots`, `r_drawviewmodel`, `r_dynamic`, `s_show`, `cl_pitchspeed`, `cl_yawspeed`, `cl_anglespeedkey`, `m_side`, `r_glowshellfreq`, `r_traceglow`, `texgamma`, `lightgamma`, `cl_bob`, `fps_max`
+**Standard (19):** `cl_bobcycle`, `cl_bobup`, `cl_showevents`, `gl_clear`, `gl_d3dflip`, `hud_takesshots`, `r_drawviewmodel`, `r_dynamic`, `s_show`, `cl_pitchspeed`, `cl_yawspeed`, `cl_anglespeedkey`, `m_side`, `r_glowshellfreq`, `r_traceglow`, `texgamma`, `lightgamma`, `cl_bob`, `fps_max`
 
 **Range cvars (7):** `lightgamma` (1.809-3), `cl_bob` (0-0.01), `cl_updaterate` (100-120), `cl_cmdrate` (100-1000), `rate` (locked 100000), `ex_interp` (0.01-0.05), `fps_max` (60-750).
 
