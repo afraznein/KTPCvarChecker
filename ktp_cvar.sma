@@ -11,6 +11,9 @@
  *                      it answers "Bad CVAR request", which parses to 0.0 and
  *                      matched the enforced 0, so these passed on every client
  *                      and enforced nothing.
+ *                    * FIXED: BLOCKED chat, console and FILTERSTUFF_BLOCKED log
+ *                      lines render the player's value with %.6f (was %.2f /
+ *                      %.3f, so 0.008999 logged as 0.00)
  *   7.39 2026-09-09 - cl_bob ceiling 0.011 -> 0.01 (operator ruling).
  *   7.38 2026-09-08 - Enforcement write-back sends the bound's own table string.
  *                      AMXX's %f truncates instead of rounding, so a bound whose
@@ -1716,7 +1719,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_chat, "")
 			client_print(id, print_chat, "[KTP] ========== CVAR ENFORCEMENT BLOCKED ==========")
 			client_print(id, print_chat, "[KTP] You need to set cl_filterstuffcmd to 0")
-			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.2f, required: %s)", s_CVARNAME, valueFromPlayer, required)
+			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.6f, required: %s)", s_CVARNAME, valueFromPlayer, required)
 			client_print(id, print_chat, "[KTP] Unless you change cl_filterstuffcmd to 0, or manually")
 			client_print(id, print_chat, "[KTP] adjust %s, you are unable to participate in this", s_CVARNAME)
 			client_print(id, print_chat, "[KTP] match by KTP rules.")
@@ -1730,7 +1733,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "This is typically caused by cl_filterstuffcmd 1")
 			client_print(id, print_console, "")
 			client_print(id, print_console, "VIOLATION: %s", s_CVARNAME)
-			client_print(id, print_console, "  Your value:    %.3f", valueFromPlayer)
+			client_print(id, print_console, "  Your value:    %.6f", valueFromPlayer)
 			client_print(id, print_console, "  Required:      %s", required)
 			client_print(id, print_console, "")
 			client_print(id, print_console, "TO FIX: Type in console:")
@@ -1742,8 +1745,8 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "==================================================")
 			client_print(id, print_console, "")
 
-			// Log this escalation
-			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.2f (required %s) after %d attempts",
+			// %.6f: AMXX's %f truncates, and at %.2f a player stuck at 0.008999 logged as 0.00.
+			log_amx("[%s] FILTERSTUFF_BLOCKED: %s <%s> (%s) - %s stuck at %.6f (required %s) after %d attempts",
 				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, required, gi_enforce_attempts[id][cvar_index])
 
 			// Announce to all players that this player is blocked

@@ -66,23 +66,40 @@ production incident or a confirmed review finding.
   call — it's a copy, not a new lookup).
 
 ## Cvar-tier array bookkeeping (high-friction, easy to get wrong)
-`gs_priority_cvars` (0.3s rotation) and `gs_standard_cvars` (1.0s rotation) are
-two **hand-maintained literal lists** that must partition `gs_cvars` exactly —
-nothing enforces this at compile time. `gb_isPriorityCvar[]` and
-`g_queryOrder[]` ARE already derived programmatically from `gs_priority_cvars`
-at `plugin_init` — that's the pattern to follow, not the one `gs_standard_cvars`
-currently uses. Every promotion/demotion between tiers (has happened in 7.13,
-7.24, 7.25, 7.27, 7.30) requires:
-1. Editing BOTH literal lists (add to one, remove from the other).
-2. Recomputing `TOTAL_CVARS`, `MIN_MAX_CVAR_START`, `STANDARD_CVARS_COUNT`, and
-   any index constants that shift (`HUD_TAKESSHOTS_INDEX`, `M_PITCH_INDEX`
-   have both shifted ±1 on past edits).
-3. Updating the README monitored-cvar counts and table.
-A cvar left in both lists double-queries and silently misattributes its tier
-in `fn_note_tier_response`'s `gb_isPriorityCvar`-based accounting — no
-compile-time signal. If you're adding tier-promotion logic anyway, prefer
-deriving `gs_standard_cvars` from `gs_cvars` filtered by `gb_isPriorityCvar[]`
-(same loop shape as `g_queryOrder`) over hand-typing a third list.
+Four hand-typed literal tables, positional and unchecked by the compiler:
+- `gs_cvars[TOTAL_CVARS]` — every enforced cvar: exact-value cvars first, then
+  the range cvars from `MIN_MAX_CVAR_START` to the end.
+- `gs_calvalues[TOTAL_CVARS]` — the value (exact) or floor (range), same order.
+- `gs_altvalues[ALT_VALUES_COUNT]` — the ceilings, one per range cvar, in range
+  order (`ALT_VALUES_COUNT == TOTAL_CVARS - MIN_MAX_CVAR_START`).
+- `gs_priority_cvars[PRIORITY_CVARS_COUNT]` — names of the 0.3s-tier cvars.
+
+The standard (1.0s) tier is **not a list**. Since 7.32 `plugin_init` derives
+`gi_standardCvarIdx[]` / `gi_standardCvarCount` as `gs_cvars` minus the
+priority names, alongside `gb_isPriorityCvar[]`, `g_queryOrder[]` and
+`gi_exInterpIdx`. There is no `gs_standard_cvars` and no
+`STANDARD_CVARS_COUNT` — don't reintroduce either. A priority name that matches
+nothing in `gs_cvars` logs `CVAR TIER MISMATCH` at init.
+
+Adding, removing or retiering a cvar (7.13, 7.24, 7.25, 7.27, 7.30, 7.40) means:
+1. Editing `gs_cvars` and `gs_calvalues` at the same position (and
+   `gs_altvalues` for a range cvar); for a retier, only `gs_priority_cvars`.
+2. Recomputing `TOTAL_CVARS`, `MIN_MAX_CVAR_START`, `ALT_VALUES_COUNT`,
+   `PRIORITY_CVARS_COUNT`, and the position constants `HUD_TAKESSHOTS_INDEX` /
+   `M_PITCH_INDEX` (shifted on most removals, by four at 7.40).
+3. Updating the README monitored-cvar total, tier counts, name lists and timing
+   table.
+
+`tools/check_cvar_tables.py` (Source Invariants CI) fails on the shape errors:
+table lengths vs their defines, a position constant naming the wrong cvar, a
+priority name missing from `gs_cvars`, duplicates, a floor above its ceiling,
+defer-bitmask overflow, README count/list drift, and any cvar on its
+`ABSENT_ON_CLIENT` refusal list. It **cannot see a value moved to the wrong
+position** — two entries swapped inside one table keep every count. The value
+side is `tools/check_published_cvars.py` against the published page, so read
+the `gs_cvars[i]` / `gs_calvalues[i]` pairing yourself on every edit. A
+compile-time signal exists only for a table LONGER than its define
+(`error 018`).
 
 ## Policy: think before enforcing a new cvar
 Before adding ANY cvar to enforcement, establish its actual server/aim impact

@@ -36,6 +36,20 @@ nothing, so they need their own evidence before anyone removes or trusts them.
 - The published cvar list (`afraznein/KTP_Documentation`) drops the same five; the `Published CVARs`
   check stays red on this change until it does.
 
+### Fixed — BLOCKED lines hid the digit that decided the verdict
+
+`FILTERSTUFF_BLOCKED` logged the player's value with `%.2f`, so a player stuck at `0.008999` (under
+the `ex_interp` floor of `0.01`) logged as `0.00` — measured on the fleet logs 2026-09-13. The
+player-facing BLOCKED chat line had the same `%.2f`, and the console line `%.3f`, which AMXX's
+truncating `%f` turns into `0.008`. All three now use `%.6f`. It still truncates the float32 the
+client reported (`0.009` prints as `0.008999`), but it can no longer drop a whole decimal place.
+
+`tools/check_enforce_roundtrip.py` pins it: every call in the BLOCKED branch of `fn_enforce_cvar`
+that renders `valueFromPlayer` must use a precision at least three digits beyond the longest bound
+in the tables, with a mutation control that reverts the log line to `%.2f` and must fail. The
+per-violation correction log, chat announcement and Discord embed keep `%.3f`; they are not BLOCKED
+lines and are unchanged here.
+
 ## 7.39
 
 **`cl_bob` ceiling 0.011 -> 0.01.** Operator ruling 2026-09-09. The enforced upper bound in
