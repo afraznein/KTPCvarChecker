@@ -258,6 +258,16 @@ def table(src: str, name: str) -> list[str]:
     return re.findall(r'"([^"]*)"', re.sub(r"//[^\n]*", "", m.group(1)))
 
 
+def computed_bound_writes(src: str) -> tuple[int, list[str]]:
+    """(writes to gf_calvalues/gf_altvalues, the ones not parsed from their table string)."""
+    writes = re.findall(r"\b(gf_(?:cal|alt)values)\s*\[[^\]]*\]\s*=(?!=)\s*([^\n]*)",
+                        strip_comments(src))
+    computed = [f"{arr}[] = {rhs.strip()}" for arr, rhs in writes
+                if not re.fullmatch(r"floatstr\(\s*gs_(?:cal|alt)values\s*\[\s*i\s*\]\s*\)",
+                                    rhs.strip())]
+    return len(writes), computed
+
+
 def check_interp_floor(src: str) -> None:
     """The enforced ex_interp FLOOR must cover one packet at cl_updaterate's FLOOR.
 
@@ -298,6 +308,21 @@ def check_interp_floor(src: str) -> None:
           f"ex_interp floor {vals['ex_interp']} < 1/{vals['cl_updaterate']} = "
           f"{float(need):.6f} — a client at the band's bottom is one packet short. "
           "Raise the ex_interp floor; do not derive it at runtime")
+    # Exactly one packet, not merely at least one: the floor is the fixed constant
+    # for the largest interval in the band, so moving the band's bottom must fail
+    # here and force the floor to be re-decided.
+    check(Fraction(vals["ex_interp"]) == need,
+          "ex_interp floor is exactly one packet at cl_updaterate's floor",
+          f"ex_interp floor {vals['ex_interp']} != 1/{vals['cl_updaterate']} — the band moved. "
+          "Re-decide the floor as a fixed table string; never derive it from 1/sv_maxupdaterate")
+    writes, computed = computed_bound_writes(src)
+    check(writes > 0, "CONTROL bound-write probe",
+          "no `gf_calvalues[i] = floatstr(...)` found — the derivation guard is blind")
+    check(not computed, "enforced bounds are parsed from table strings",
+          f"computed at runtime: {computed}")
+    derived = src + "\n\tgf_calvalues[gi_exInterpIdx] = 1.0 / get_pcvar_float(gp_cvar_sv_maxupdaterate)\n"
+    check(computed_bound_writes(derived)[1] != [], "CONTROL derivation guard discriminates",
+          "a floor computed from 1/sv_maxupdaterate is not caught")
     # The shape this guard exists for, pinned as arithmetic rather than against
     # the live table so a legitimate rate change cannot turn it into a false alarm:
     # the 7.22–7.37 floor (0.009) at the band's bottom (100) is one packet short.
