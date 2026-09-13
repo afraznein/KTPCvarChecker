@@ -2,6 +2,39 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.40
+
+**Removed five enforced cvars the DoD client does not have:** `fastsprites`, `gl_nobind`,
+`gl_nocolors`, `gl_playermip`, `r_luminance`.
+
+A query for a cvar the client never registered comes back as `Bad CVAR request`. That reply parses
+to `0.0`, all five were enforced at `0`, so every client passed and nobody was ever corrected. They
+enforced nothing; removing them changes nothing a player can do.
+
+Evidence, gathered before the change:
+- None of the five names is anywhere in the raw bytes of `hw.dll` or `client.dll`. The same scan
+  found its controls: `ex_interp`, `gl_overbright`, `r_traceglow`, `cl_nodelta`.
+- Zero violations for any of the five across the fleet log corpus, where `gl_overbright`,
+  `r_traceglow` and `gl_picmip` all have non-zero counts.
+
+`gl_clear`, `s_show`, `cl_showevents`, `gl_d3dflip` and `gl_monolights` stay. Their names are in the
+client binary, but so is `cl_nodelta`'s, and it still answers `Bad CVAR request` — presence settles
+nothing, so they need their own evidence before anyone removes or trusts them.
+
+- `TOTAL_CVARS` 37 -> 32, `MIN_MAX_CVAR_START` 30 -> 25, `HUD_TAKESSHOTS_INDEX` 13 -> 9,
+  `M_PITCH_INDEX` 14 -> 10, `PRIORITY_CVARS_COUNT` 15 -> 13 (`r_luminance` and `gl_nocolors` were
+  priority), standard tier 22 -> 19. `ALT_VALUES_COUNT` is unchanged: all five were exact-value cvars.
+- Priority rotation ~4.5 s -> ~3.9 s, standard ~22 s -> ~19 s, full initial sweep ~12.1 s -> ~10.6 s.
+- Every index now fits in `g_deferPending`. `g_deferPendingHi` and the `< 32` split stay, so the
+  table can grow again without re-deriving the bitmask.
+- **New CI gate `tools/check_cvar_tables.py`** (Source Invariants): table lengths against their
+  `#define`s, `HUD_TAKESSHOTS_INDEX` / `M_PITCH_INDEX` naming the right cvar, priority names present in
+  `gs_cvars`, range floors not above ceilings, the defer bitmask capacity, the README tier counts and
+  lists, and a refusal list of cvars known absent on the DoD client. Every rule has a mutation control
+  that must fail for that rule.
+- The published cvar list (`afraznein/KTP_Documentation`) drops the same five; the `Published CVARs`
+  check stays red on this change until it does.
+
 ## 7.39
 
 **`cl_bob` ceiling 0.011 -> 0.01.** Operator ruling 2026-09-09. The enforced upper bound in
