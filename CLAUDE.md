@@ -55,11 +55,19 @@ KTPCvarChecker: validates and enforces
 
 ## Published-list check (`tools/check_published_cvars.py`)
 
-It compares cvar **names** between `gs_cvars[]` and the published list, in both directions. Values are
-only printed, never compared, so **a wrong published number passes**. It also can't see behaviour the
-page has to state in words — a cvar accepted with more than one value (`m_pitch` in either sign), or one
-enforced only in competitive modes (`ktp_match_competitive`). Check those by reading `gs_calvalues[]`,
-`gs_altvalues[]` and the enforcement path against the page.
+It compares the published list against the source by **name**, in both directions, and by **value**:
+each exact cvar's published value against `gs_calvalues[]`, each range cvar's bounds, in order, against
+`gs_calvalues[]` / `gs_altvalues[]`, as exact decimals. It reads the doc **live from
+`KTP_Documentation` `main`**, so a PR here is judged against the doc as merged, never against a doc branch.
+
+Behaviour a number cannot express lives in its `BEHAVIOURS` table: `m_pitch` accepted at either sign,
+`hud_takesshots` enforced only in competitive modes. Each entry must still be special-cased in the source,
+and its published row must say so in words. A new `#define *_INDEX` special case with no entry fails the
+check rather than being skipped. `tools/test_check_published_cvars.py` runs it on a hand-written fixture
+pair, where a correct doc must pass and each single mutation must be named.
+
+Still not compared: the Quick Reference block and the `Default` column. Those are recommendations,
+not enforced bounds, so a recommended value outside the enforced range would pass.
 
 To read `PLUGIN_VERSION` out of a built `ktp_cvar.amxx`, see KTPAMXX `CLAUDE.md` § Identifying deployed
 artifacts — `strings` on the file returns nothing.
