@@ -2,10 +2,23 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.40
- *   Release Date:      2026-09-12
+ *   Current Version:   7.41
+ *   Release Date:      2026-09-13
  *
  *   Changelog:
+ *   7.41 2026-09-13 - ADDED: ktp_cvar_get_blocked native + "ktp_cvar_checker"
+ *                      library, so KTPMatchHandler can refuse .ready while a
+ *                      player is blocking an enforced correction. Blocked
+ *                      holds from the BLOCKED branch until the cvar answers in
+ *                      range or the player disconnects.
+ *                    * CHANGED: a map change (client_disconnected drop=false)
+ *                      carries blocked cvars to the same authid, so halftime
+ *                      does not reopen .ready while they are re-detected
+ *                    * CHANGED: hud_takesshots' competitive-only gate moved to
+ *                      fn_takesshots_exempt(), shared by enforcement and the
+ *                      native so they cannot disagree
+ *                    * CHANGED: BLOCKED chat/console text says the match
+ *                      plugin refuses .ready instead of "unable to participate"
  *   7.40 2026-09-12 - Removed fastsprites, gl_nobind, gl_nocolors, gl_playermip
  *                      and r_luminance. The DoD client does not register them:
  *                      it answers "Bad CVAR request", which parses to 0.0 and
@@ -282,7 +295,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.40"
+#define PLUGIN_VERSION "7.41"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -404,6 +417,12 @@ new g_discordCvarNames[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS][MAX_CVAR_NAME_LEN]
 new Float:g_discordCvarValues[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]      // Player's bad value
 #define CORRECTION_LEN 16   // longest table string is "100000"; "-0.022" for m_pitch
 new g_discordCvarCorrected[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS][CORRECTION_LEN]  // Corrected-to value, the bound's own string
+
+// What the player was told to type when a cvar went BLOCKED. Only meaningful
+// while gb_filterstuff_warned is set for the same slot and cvar.
+new gs_blockedRequired[MAX_PLAYERS + 1][TOTAL_CVARS][CORRECTION_LEN]
+// Authid whose blocks survive the map change in progress on this slot.
+new gs_blockCarryAuthid[MAX_PLAYERS + 1][44]
 new g_discordCvarCounts[MAX_PLAYERS + 1][MAX_CVAR_VIOLATIONS]            // Repeat count per cvar
 new g_discordViolationCount[MAX_PLAYERS + 1]                              // Unique cvars in buffer
 new bool:g_discordPending[MAX_PLAYERS + 1]
@@ -623,6 +642,15 @@ new bool:gb_netobsHeartbeatDone
 // ============================================================================
 // PLUGIN INITIALIZATION
 // ============================================================================
+
+// KTPMatchHandler binds these optionally by name and by PLUGIN_NAME, so a rename
+// silently turns its .ready refusal off (check_blocked_bridge.py holds them).
+#define KTP_CVAR_LIBRARY "ktp_cvar_checker"
+
+public plugin_natives() {
+	register_library(KTP_CVAR_LIBRARY)
+	register_native("ktp_cvar_get_blocked", "_native_get_blocked")
+}
 
 public plugin_init() {
 	register_plugin(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR)
@@ -888,12 +916,19 @@ public client_putinserver(id) {
 	// occupant's stored identity) — this also clears the slot for the new player.
 	flush_discord_violations(id)
 	if (gb_hasViolations[id]) {
+		// Same player back from a map change keeps their blocks; anyone else starts clean.
+		new authid[44]
+		get_user_authid(id, authid, charsmax(authid))
+		new bool:carry = gs_blockCarryAuthid[id][0] != EOS && equal(authid, gs_blockCarryAuthid[id])
 		for (new i = 0; i < TOTAL_CVARS; i++) {
+			if (carry && gb_filterstuff_warned[id][i])
+				continue
 			gi_enforce_attempts[id][i] = 0
 			gb_filterstuff_warned[id][i] = false
 		}
-		gb_hasViolations[id] = false
+		gb_hasViolations[id] = carry
 	}
+	gs_blockCarryAuthid[id][0] = EOS
 	gi_unansweredQueries[id] = 0
 	gf_silenceStart[id] = 0.0
 	gf_putinTime[id] = get_gametime()
@@ -917,7 +952,7 @@ public client_putinserver(id) {
 	set_task(10.0, "fn_start_monitoring", id)
 }
 
-public client_disconnected(id) {
+public client_disconnected(id, bool:drop, message[], maxlen) {
 	gb_StopChecking[id] = true
 	remove_task(id)
 	remove_task(id + 1000)  // priority monitoring task
@@ -945,13 +980,35 @@ public client_disconnected(id) {
 		flush_discord_violations(id)
 	}
 
-	// Reset enforcement tracking (only loop if player had violations)
+	// Reset enforcement tracking (only loop if player had violations).
+	// drop is false on a map change, which must not reopen .ready for halftime;
+	// a real disconnect (drop true) clears everything.
+	gs_blockCarryAuthid[id][0] = EOS
 	if (gb_hasViolations[id]) {
+		new bool:carry = false
+		if (!drop) {
+			for (new i = 0; i < TOTAL_CVARS; i++) {
+				if (gb_filterstuff_warned[id][i]) {
+					carry = true
+					break
+				}
+			}
+		}
+		if (carry) {
+			get_user_authid(id, gs_blockCarryAuthid[id], charsmax(gs_blockCarryAuthid[]))
+			// STEAM_ID_LAN / VALVE_ID_LAN / STEAM_ID_PENDING are shared, so they cannot key a carry.
+			if (containi(gs_blockCarryAuthid[id], "_ID_") != -1) {
+				carry = false
+				gs_blockCarryAuthid[id][0] = EOS
+			}
+		}
 		for (new i = 0; i < TOTAL_CVARS; i++) {
+			if (carry && gb_filterstuff_warned[id][i])
+				continue
 			gi_enforce_attempts[id][i] = 0
 			gb_filterstuff_warned[id][i] = false
 		}
-		gb_hasViolations[id] = false
+		gb_hasViolations[id] = carry
 	}
 }
 
@@ -1662,6 +1719,38 @@ stock fn_reset_enforce_tracking(id, cvar_index) {
 	}
 }
 
+// hud_takesshots is only enforced in competitive matches.
+// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
+stock bool:fn_takesshots_exempt(cvar_index) {
+	if (cvar_index != HUD_TAKESSHOTS_INDEX)
+		return false
+	// Re-cache pointer if not found at init (KTPMatchHandler may load after us)
+	if (!gp_cvar_match_competitive)
+		gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
+	return gp_cvar_match_competitive && get_pcvar_num(gp_cvar_match_competitive) == 0
+}
+
+// ktp_cvar_get_blocked(id, cvar[], cvarLen, required[], requiredLen): count of
+// enforced cvars still blocked, first one's name and value to type in the buffers.
+// A hand fix clears on that cvar's next in-range answer.
+public _native_get_blocked(plugin, params) {
+	new id = get_param(1)
+	if (id < 1 || id > MAX_PLAYERS || !gb_hasViolations[id] || !is_user_connected(id)
+		|| is_user_bot(id) || is_user_hltv(id))
+		return 0
+
+	new count = 0
+	for (new i = 0; i < TOTAL_CVARS; i++) {
+		if (!gb_filterstuff_warned[id][i] || fn_takesshots_exempt(i))
+			continue
+		if (count++ == 0) {
+			set_string(2, gs_cvars[i], get_param(3))
+			set_string(4, gs_blockedRequired[id][i], get_param(5))
+		}
+	}
+	return count
+}
+
 // ============================================================================
 // ENFORCEMENT & PUNISHMENT
 // ============================================================================
@@ -1686,14 +1775,8 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 		copy(required, charsmax(required), gs_calvalues[cvar_index])
 
 	// Skip hud_takesshots enforcement for non-competitive matches (12man, scrim, draft)
-	// ktp_match_competitive is set by KTPMatchHandler: 1 = .ktp/.ktpOT, 0 = casual modes
-	if (cvar_index == HUD_TAKESSHOTS_INDEX) {
-		// Re-cache pointer if not found at init (KTPMatchHandler may load after us)
-		if (!gp_cvar_match_competitive)
-			gp_cvar_match_competitive = get_cvar_pointer("ktp_match_competitive")
-		if (gp_cvar_match_competitive && get_pcvar_num(gp_cvar_match_competitive) == 0)
-			return PLUGIN_CONTINUE
-	}
+	if (fn_takesshots_exempt(cvar_index))
+		return PLUGIN_CONTINUE
 
 	// Increment enforcement attempt counter
 	gi_enforce_attempts[id][cvar_index]++
@@ -1714,15 +1797,17 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 		// Only show warning once per cvar until player fixes it
 		if (!gb_filterstuff_warned[id][cvar_index]) {
 			gb_filterstuff_warned[id][cvar_index] = true
+			copy(gs_blockedRequired[id][cvar_index], CORRECTION_LEN - 1, required)
 
 			// Send warning to the player
 			client_print(id, print_chat, "")
 			client_print(id, print_chat, "[KTP] ========== CVAR ENFORCEMENT BLOCKED ==========")
 			client_print(id, print_chat, "[KTP] You need to set cl_filterstuffcmd to 0")
 			client_print(id, print_chat, "[KTP] You are in violation of: %s (current: %.6f, required: %s)", s_CVARNAME, valueFromPlayer, required)
-			client_print(id, print_chat, "[KTP] Unless you change cl_filterstuffcmd to 0, or manually")
-			client_print(id, print_chat, "[KTP] adjust %s, you are unable to participate in this", s_CVARNAME)
-			client_print(id, print_chat, "[KTP] match by KTP rules.")
+			// Once blocked this plugin stops re-sending, so cl_filterstuffcmd 0 alone
+			// leaves the value wrong: the player has to type the cvar as well.
+			client_print(id, print_chat, "[KTP] In console type: cl_filterstuffcmd 0; %s %s", s_CVARNAME, required)
+			client_print(id, print_chat, "[KTP] Until it is fixed, the match plugin refuses your .ready.")
 			client_print(id, print_chat, "[KTP] ================================================")
 			client_print(id, print_chat, "")
 
@@ -1740,8 +1825,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 			client_print(id, print_console, "  cl_filterstuffcmd 0")
 			client_print(id, print_console, "  %s %s", s_CVARNAME, required)
 			client_print(id, print_console, "")
-			client_print(id, print_console, "Until this is resolved, you cannot participate")
-			client_print(id, print_console, "in competitive matches per KTP rules.")
+			client_print(id, print_console, "Until this is resolved, you cannot .ready for a match.")
 			client_print(id, print_console, "==================================================")
 			client_print(id, print_console, "")
 
@@ -1750,7 +1834,7 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, required, gi_enforce_attempts[id][cvar_index])
 
 			// Announce to all players that this player is blocked
-			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot participate until fixed", PLUGIN_NAME, gs_logname, s_CVARNAME)
+			client_print(0, print_chat, "[%s] %s has blocked cvar enforcement (%s) - cannot ready for a match until fixed", PLUGIN_NAME, gs_logname, s_CVARNAME)
 		}
 		// Don't spam - just silently skip further enforcement attempts
 		return PLUGIN_CONTINUE

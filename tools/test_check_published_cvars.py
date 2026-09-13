@@ -129,7 +129,7 @@ def main() -> int:
                    "STALE BEHAVIOUR: fn_checkvalues()")
     expect_problem("hud_takesshots stops reading the competitive flag",
                    once(SMA, 'get_cvar_pointer("ktp_match_competitive")', "0", "sma hud"), DOC,
-                   "STALE BEHAVIOUR: fn_enforce_cvar()")
+                   "STALE BEHAVIOUR: fn_takesshots_exempt()")
     expect_problem("M_PITCH_INDEX points at the wrong cvar",
                    once(SMA, "#define M_PITCH_INDEX 2", "#define M_PITCH_INDEX 3", "sma index"), DOC,
                    "STALE BEHAVIOUR: M_PITCH_INDEX 3")
