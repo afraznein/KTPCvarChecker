@@ -32,6 +32,17 @@ KTPAMXX: client_cvar_changed forward
 KTPCvarChecker: validates and enforces
 ```
 
+## Published-list check (`tools/check_published_cvars.py`)
+
+It compares cvar **names** between `gs_cvars[]` and the published list, in both directions. Values are
+only printed, never compared, so **a wrong published number passes**. It also can't see behaviour the
+page has to state in words — a cvar accepted with more than one value (`m_pitch` in either sign), or one
+enforced only in competitive modes (`ktp_match_competitive`). Check those by reading `gs_calvalues[]`,
+`gs_altvalues[]` and the enforcement path against the page.
+
+To read `PLUGIN_VERSION` out of a built `ktp_cvar.amxx`, see KTPAMXX `CLAUDE.md` § Identifying deployed
+artifacts — `strings` on the file returns nothing.
+
 ## Server Deployment
 
 Deploy compiled plugin to production servers using Python/Paramiko.
