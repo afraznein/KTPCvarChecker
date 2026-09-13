@@ -88,3 +88,7 @@ See `N:\Nein_\KTP Git Projects\CLAUDE.md` for paramiko SSH documentation.
 ## Key Files to Update on Version Bump
 1. `ktp_cvar.sma` - `#define PLUGIN_VERSION`
 2. Update any CHANGELOG.md or README.md if present
+
+## Lang file
+
+`data/lang/ktp_cvar.txt` is the fleet's live file byte for byte, CRLF included. The distributor overwrites whole files, so a repo copy that drifts from the live one strips keys on all 24 servers when pushed; compare md5s before shipping it.

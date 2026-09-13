@@ -2,6 +2,13 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## Unreleased
+
+- **`data/lang/ktp_cvar.txt` now matches the file the fleet runs, byte for byte (CRLF).** The repo copy
+  was LF, lacked the MOTD keys, and still had the pre-7.38 layout, so pushing it through the
+  distributor would have stripped keys fleet-wide. `FCOS_LANG_LOG_ENTRY` prints the KTP value with
+  `%s`, matching the bound string 7.38 passes. Live md5 `9bde50a64dba40c92eaf58134cca6616`.
+
 ## 7.41
 
 **A client blocking cvar corrections can no longer ready up for a match.** Operator ruling
