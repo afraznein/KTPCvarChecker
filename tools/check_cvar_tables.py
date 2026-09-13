@@ -11,9 +11,10 @@ It also refuses cvars the DoD client is known NOT to register. A query for one
 answers "Bad CVAR request", the reply parses to 0.0, and a rule of 0 then
 passes on every client forever -- the cvar looks enforced and enforces nothing.
 
-Every rule carries a mutation control: the same checks are re-run on a copy of
-the source with one thing broken, and must fail. A rule that cannot fail on a
-broken table is not checking it.
+The shape rules carry mutation controls: the checks are re-run on a copy of the
+source with one thing broken, and must fail for that rule. What this does NOT
+pin is values: two entries swapped inside one table keep every count and pass
+here. Pinning values is the published-list compare's job, not this gate's.
 
     python3 tools/check_cvar_tables.py [--sma ktp_cvar.sma]
 
@@ -210,6 +211,12 @@ def controls(src: str, readme: str) -> list[str]:
          lambda s: src_edit(s, "gs_priority_cvars", lambda t: [t[0] + "x"] + t[1:])),
         ("absent cvar re-added with every constant kept consistent", "does not register",
          absent_readded),
+        ("absent cvar in the observe-only table", "gs_observe_cvars carries",
+         lambda s: src_edit(s, "gs_observe_cvars", lambda t: ["cl_nopred"] + t[1:])),
+        ("duplicate cvar name, count kept", "more than once",
+         lambda s: src_edit(s, "gs_cvars", lambda t: t[:1] + [t[0]] + t[2:])),
+        ("range floor above its ceiling", "above ceiling",
+         lambda s: src_edit(s, "gs_altvalues", lambda t: ["0"] + t[1:])),
     ]
     failed: list[str] = []
     for label, expect, mutate in cases:
@@ -220,12 +227,23 @@ def controls(src: str, readme: str) -> list[str]:
         elif not any(expect in p for p in found):
             failed.append(f"CONTROL {label}: no problem mentioning {expect!r} (got {found})")
 
-    readme_mutated = readme.replace(f"`{first_prio}`, ", "", 1)
-    found = problems(src, readme_mutated)
-    if readme_mutated == readme:
-        failed.append("CONTROL README list: mutation did not apply -- the control is blind")
-    elif not any("README Priority" in p for p in found):
-        failed.append(f"CONTROL README list: a missing priority name was not reported (got {found})")
+    def drop_first_listed(text: str, label: str) -> str:
+        return re.sub(r"(\*\*" + label + r" \(\d+\):\*\* )`[a-z_0-9]+`, ", r"\1", text, count=1)
+
+    readme_cases = [
+        ("README priority name missing", "README Priority",
+         readme.replace(f"`{first_prio}`, ", "", 1)),
+        ("README standard name missing", "README Standard", drop_first_listed(readme, "Standard")),
+        ("README total off by one", "monitored cvars",
+         re.sub(r"(## Monitored Cvars \()(\d+)", lambda m: m.group(1) + str(int(m.group(2)) + 1),
+                readme, count=1)),
+    ]
+    for label, expect, mutated in readme_cases:
+        found = problems(src, mutated) if mutated != readme else []
+        if mutated == readme:
+            failed.append(f"CONTROL {label}: mutation did not apply -- the control is blind")
+        elif not any(expect in p for p in found):
+            failed.append(f"CONTROL {label}: no problem mentioning {expect!r} (got {found})")
     return failed
 
 

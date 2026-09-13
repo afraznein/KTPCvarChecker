@@ -30,8 +30,9 @@ nothing, so they need their own evidence before anyone removes or trusts them.
 - **New CI gate `tools/check_cvar_tables.py`** (Source Invariants): table lengths against their
   `#define`s, `HUD_TAKESSHOTS_INDEX` / `M_PITCH_INDEX` naming the right cvar, priority names present in
   `gs_cvars`, range floors not above ceilings, the defer bitmask capacity, the README tier counts and
-  lists, and a refusal list of cvars known absent on the DoD client. Every rule has a mutation control
-  that must fail for that rule.
+  lists, and a refusal list of cvars known absent on the DoD client. The shape rules carry mutation
+  controls that must fail for that rule. It does not pin values: two entries swapped inside one table
+  keep every count and pass it.
 - The published cvar list (`afraznein/KTP_Documentation`) drops the same five; the `Published CVARs`
   check stays red on this change until it does.
 

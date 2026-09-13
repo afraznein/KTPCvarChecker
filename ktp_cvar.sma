@@ -435,9 +435,9 @@ new gs_priority_cvars[PRIORITY_CVARS_COUNT][] = {
 // v7.24 (2026-04-28): re-added 7 cvars dropped in v7.13 (2026-02-17) under the
 // false rationale "engine-limited values." All actually register with
 // `pfnRegisterVariable(..., 0)` — flag 0 means no FCVAR_SERVER, no clamp,
-// freely settable client-side. Indices 22-25 (keyboard-look — defeats
-// alias-based no-recoil pulse scripts at cl_pitchspeed=9999 + 1000fps) and
-// indices 26-28 (visual-class — gl_picmip enforced at 0 defeats picmip
+// freely settable client-side. The keyboard-look set (cl_pitchspeed through
+// m_side — defeats alias-based no-recoil pulse scripts at cl_pitchspeed=9999 +
+// 1000fps) and the visual set (gl_picmip through r_traceglow — gl_picmip enforced at 0 defeats picmip
 // wallhack; r_glowshellfreq enforced at 2.2 = DoD default for integrity
 // check only; r_traceglow enforced at 0 = its actual default).
 //
@@ -593,7 +593,7 @@ new gi_netUpdaterate[MAX_PLAYERS + 1]  // cache only -- never gate on its value
 new bool:gb_netobsSampled[MAX_PLAYERS + 1]
 new Float:gf_netInterp[MAX_PLAYERS + 1]     // last ex_interp seen via the QUERY path
 new bool:gb_netInterpSeen[MAX_PLAYERS + 1]
-new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried ~4.5s
+new bool:gb_netInterpWarned[MAX_PLAYERS + 1] // debounce: ex_interp is re-queried every priority cycle
 new gi_exInterpIdx                           // derived; -1 if ex_interp leaves gs_cvars
 // Engine-owned rate clamp, resolved lazily -- 0 means "not found", which the
 // reader turns into "no clamp" rather than a runtime error on a null pcvar.
@@ -1407,7 +1407,7 @@ stock fn_netobs_eval_interp(id) {
 	new Float:need = fn_netobs_effective_interval(updaterate)
 	new bool:low = (gf_netInterp[id] < need - INTERP_EPSILON)
 
-	// ex_interp rides the ~4.5s priority rotation, so only TRANSITIONS log --
+	// ex_interp rides the priority rotation, so only TRANSITIONS log --
 	// otherwise one mis-set client writes ~13 lines a minute, forever.
 	if (low == gb_netInterpWarned[id])
 		return
