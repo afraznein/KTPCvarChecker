@@ -20,6 +20,11 @@ reports:
   * A map change (client_disconnected with drop false) carries blocked cvars to
     the same authid on the next putinserver; a real drop or a different player
     clears them. Without it halftime reopens .ready for the re-detection window.
+  * The one exemption (v7.42): a sub-floor `ex_interp` returns before the BLOCKED
+    branch, so it never sets the flag and never reaches `.ready`. It is scoped to
+    that cvar under that bound -- drop the `!ceiling` and an interp-abuse ceiling
+    value stops blocking too; move the branch after the BLOCKED one and it does
+    nothing at all, silently, because the flag is already set by then.
 
 Each rule carries a mutation that must fail it.
 
@@ -39,6 +44,28 @@ LIBRARY = "ktp_cvar_checker"
 NATIVE = "ktp_cvar_get_blocked"
 TITLE = "KTP Cvar Checker"
 RESET_SITES = {"client_putinserver", "client_disconnected", "fn_reset_enforce_tracking"}
+
+EXEMPT_GUARD = re.compile(r"if\s*\(\s*cvar_index\s*==\s*gi_exInterpIdx\s*&&\s*!ceiling\s*&&"
+                          r"\s*gi_enforce_attempts\[id\]\[cvar_index\]\s*>=\s*MAX_ENFORCE_ATTEMPTS\s*\)")
+BLOCK_GUARD = re.compile(r"if\s*\(\s*gi_enforce_attempts\[id\]\[cvar_index\]\s*>=\s*MAX_ENFORCE_ATTEMPTS\s*\)"
+                         r"\s*\{\s*if\s*\(\s*!gb_filterstuff_warned\[id\]\[cvar_index\]\s*\)")
+
+
+def exempt_block(text: str) -> str:
+    """The ex_interp correct-and-continue branch, brace-matched. "" when absent."""
+    m = EXEMPT_GUARD.search(text)
+    if not m:
+        return ""
+    i = text.index("{", m.end())
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[m.start():j + 1]
+    return ""
 
 
 def problems(src: str) -> list[str]:
@@ -87,6 +114,30 @@ def problems(src: str) -> list[str]:
         out.append("the BLOCKED branch does not record `required` into gs_blockedRequired "
                    "right after setting the flag")
 
+    # v7.42: sub-floor ex_interp is corrected and continues, and nothing else is.
+    exempt = exempt_block(enforce)
+    block_at = BLOCK_GUARD.search(enforce)
+    if not exempt:
+        out.append("fn_enforce_cvar has no `cvar_index == gi_exInterpIdx && !ceiling` branch "
+                   "guarding MAX_ENFORCE_ATTEMPTS, so a sub-floor ex_interp blocks .ready again "
+                   "-- and 0.009 was the floor itself until 7.38")
+    else:
+        if "return PLUGIN_CONTINUE" not in exempt:
+            out.append("the ex_interp exemption does not return, so it falls through into the "
+                       "BLOCKED branch and exempts nothing")
+        if "gb_filterstuff_warned" in exempt:
+            out.append("the ex_interp exemption touches gb_filterstuff_warned; that flag is what "
+                       "the native reports and .ready refuses on")
+        if block_at and enforce.index(exempt) > block_at.start():
+            out.append("the ex_interp exemption sits after the BLOCKED branch, which has already "
+                       "set the flag by then -- it is dead code that reads as a fix")
+    if exempt and "gi_enforce_attempts[id][cvar_index] == MAX_ENFORCE_ATTEMPTS" not in exempt:
+        out.append("the ex_interp exemption has no `== MAX_ENFORCE_ATTEMPTS` debounce, so its "
+                   "notice repeats on every rotation")
+    if len(re.findall(r"gb_filterstuff_warned\[id\]\[\w+\]\s*=\s*true", code)) != 1:
+        out.append("gb_filterstuff_warned is set true somewhere other than the single BLOCKED "
+                   "branch")
+
     # Blocks survive a map change only for the same authid, and never a real drop.
     disc = body_of(src, "client_disconnected")
     if not re.search(r"if\s*\(\s*!drop\s*\)", disc):
@@ -115,7 +166,35 @@ def problems(src: str) -> list[str]:
     return out
 
 
+def _exempt_mutate(s: str, edit) -> str:
+    blk = exempt_block(s)
+    return s.replace(blk, edit(blk), 1) if blk else s
+
+
+def _exempt_after_block(s: str) -> str:
+    """Move the exemption below the BLOCKED branch -- present, and inert."""
+    blk = exempt_block(s)
+    anchor = "\t// Store enforced cvar name to prevent recursion"
+    if not blk or anchor not in s:
+        return s
+    return s.replace(blk, "", 1).replace(anchor, blk + "\n\n" + anchor, 1)
+
+
 MUTATIONS = [
+    ("ex_interp exemption removed",
+     lambda s: s.replace("cvar_index == gi_exInterpIdx && !ceiling", "false && !ceiling")),
+    ("exemption ignores which bound was crossed",
+     lambda s: s.replace("gi_exInterpIdx && !ceiling", "gi_exInterpIdx && (ceiling || !ceiling)")),
+    ("exemption falls through into the BLOCKED branch",
+     lambda s: _exempt_mutate(s, lambda b: b.replace("return PLUGIN_CONTINUE", "", 1))),
+    ("exemption moved below the BLOCKED branch", _exempt_after_block),
+    ("exemption blocks anyway",
+     lambda s: _exempt_mutate(s, lambda b: b.replace(
+         "log_amx(", "gb_filterstuff_warned[id][cvar_index] = true\n\t\t\tlog_amx(", 1))),
+    ("exemption notice loses its debounce",
+     lambda s: _exempt_mutate(s, lambda b: b.replace(
+         "gi_enforce_attempts[id][cvar_index] == MAX_ENFORCE_ATTEMPTS",
+         "gi_enforce_attempts[id][cvar_index] >= MAX_ENFORCE_ATTEMPTS", 1))),
     ("library renamed", lambda s: s.replace(f'"{LIBRARY}"', '"ktp_cvar"')),
     ("title renamed", lambda s: s.replace(f'"{TITLE}"', '"KTP Cvar"')),
     ("native not registered", lambda s: s.replace(f'register_native("{NATIVE}"', 'register_native("x"')),
