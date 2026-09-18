@@ -17,9 +17,12 @@ refuse `.ready`.** Operator ruling on issue #22. `0.009` was this cvar's floor u
 client did not take, and the player was blocked. That was cosmetic until 7.41 gave the blocked state
 to KTPMatchHandler, and from 2026-09-15 it silently stopped matches from starting.
 
-- **The floor stays `0.01` and the correction still goes out.** Nothing about the value changes: the
-  cvar is still validated, still corrected with the bound's own table string, still logged. Only the
-  escalation at `MAX_ENFORCE_ATTEMPTS` is dropped, and only for this cvar below this bound.
+- **The floor stays `0.01`, and correction is unchanged up to `MAX_ENFORCE_ATTEMPTS`.** The cvar is
+  still validated, still corrected with the bound's own table string, still logged. What is dropped is
+  only the escalation at the third attempt, and only for this cvar below this bound. Corrections stop
+  there, exactly as the blocked path stops them -- so a client that really is filtering stuffcmds now
+  keeps playing at a sub-floor `ex_interp`, uncorrected and unblocked. That is the ruling's cost, and
+  it is the trade against a legal value stopping matches.
 - **`gb_filterstuff_warned` is never set for it**, which is the whole mechanism: that flag is what
   `ktp_cvar_get_blocked` reports and what the match handler refuses `.ready` on. The native, the
   bridge contract and the three reset sites are untouched, so every other cvar blocks exactly as
@@ -31,6 +34,10 @@ to KTPMatchHandler, and from 2026-09-15 it silently stopped matches from startin
   same fields. A player who was going to be blocked is now told, in chat and console, that the
   corrections are not reaching them and what to type -- without the "you cannot ready" language,
   which would no longer be true. The global "has blocked cvar enforcement" announce does not fire.
+- **The 7.41 pre-stage canary now needs both tokens.** 7.41 says to check the fleet logs for
+  `FILTERSTUFF_BLOCKED` spread across many SteamIDs on one cvar before staging. `ex_interp` floor cases
+  log `INTERP_UNCORRECTED` from here, so grep for both or that canary goes quiet on exactly the cvar
+  that caused this.
 - **`tools/check_blocked_bridge.py` holds the new shape**: the branch exists, carries `!ceiling`,
   returns, never touches the flag, sits before the BLOCKED branch, and debounces on
   `== MAX_ENFORCE_ATTEMPTS`. Each rule has a mutation control, including one that moves the branch

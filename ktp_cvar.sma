@@ -1813,9 +1813,11 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 	if (cvar_index == gi_exInterpIdx && !ceiling
 		&& gi_enforce_attempts[id][cvar_index] >= MAX_ENFORCE_ATTEMPTS) {
 		// == MAX, not >=: the counter rises on every attempt and only an
-		// in-range answer clears it, so this says it once per streak with no
-		// second flag -- a new one would need a reset site, and the bridge
-		// contract fixes those at three.
+		// in-range answer clears it, so this says it once per streak without a
+		// second flag -- and a new per-player flag owes a clear in BOTH
+		// client_putinserver and client_disconnected. The cost of equality is
+		// that the disconnect-mid-enforcement return above can spend the
+		// attempt that would have been MAX, and then nothing is ever logged.
 		if (gi_enforce_attempts[id][cvar_index] == MAX_ENFORCE_ATTEMPTS) {
 			client_print(id, print_chat, "[KTP] Your %s is below the minimum and corrections are not reaching your client.", s_CVARNAME)
 			client_print(id, print_chat, "[KTP] In console type: cl_filterstuffcmd 0; %s %s", s_CVARNAME, required)
