@@ -9,6 +9,40 @@ All notable changes to KTP Cvar Checker will be documented in this file.
   distributor would have stripped keys fleet-wide. `FCOS_LANG_LOG_ENTRY` prints the KTP value with
   `%s`, matching the bound string 7.38 passes. Live md5 `9bde50a64dba40c92eaf58134cca6616`.
 
+## 7.42
+
+**A `ex_interp` below the floor is corrected and continues -- it never becomes a block, so it cannot
+refuse `.ready`.** Operator ruling on issue #22. `0.009` was this cvar's floor until 7.38 moved it to
+`0.01`, so a value that had been legal for years became a violation overnight; three corrections the
+client did not take, and the player was blocked. That was cosmetic until 7.41 gave the blocked state
+to KTPMatchHandler, and from 2026-09-15 it silently stopped matches from starting.
+
+- **The floor stays `0.01`, and correction is unchanged up to `MAX_ENFORCE_ATTEMPTS`.** The cvar is
+  still validated, still corrected with the bound's own table string, still logged. What is dropped is
+  only the escalation at the third attempt, and only for this cvar below this bound. Corrections stop
+  there, exactly as the blocked path stops them -- so a client that really is filtering stuffcmds now
+  keeps playing at a sub-floor `ex_interp`, uncorrected and unblocked. That is the ruling's cost, and
+  it is the trade against a legal value stopping matches.
+- **`gb_filterstuff_warned` is never set for it**, which is the whole mechanism: that flag is what
+  `ktp_cvar_get_blocked` reports and what the match handler refuses `.ready` on. The native, the
+  bridge contract and the three reset sites are untouched, so every other cvar blocks exactly as
+  before.
+- **Scoped to the floor, not the cvar.** `ex_interp` above its `0.05` ceiling still blocks. A ceiling
+  value is chosen; a sub-floor one was inherited from the old bound, and that is the difference the
+  exemption is paying for.
+- **`INTERP_UNCORRECTED`** replaces `FILTERSTUFF_BLOCKED` for this case, once per streak, with the
+  same fields. A player who was going to be blocked is now told, in chat and console, that the
+  corrections are not reaching them and what to type -- without the "you cannot ready" language,
+  which would no longer be true. The global "has blocked cvar enforcement" announce does not fire.
+- **The 7.41 pre-stage canary now needs both tokens.** 7.41 says to check the fleet logs for
+  `FILTERSTUFF_BLOCKED` spread across many SteamIDs on one cvar before staging. `ex_interp` floor cases
+  log `INTERP_UNCORRECTED` from here, so grep for both or that canary goes quiet on exactly the cvar
+  that caused this.
+- **`tools/check_blocked_bridge.py` holds the new shape**: the branch exists, carries `!ceiling`,
+  returns, never touches the flag, sits before the BLOCKED branch, and debounces on
+  `== MAX_ENFORCE_ATTEMPTS`. Each rule has a mutation control, including one that moves the branch
+  below the BLOCKED branch -- present, and inert.
+
 ## 7.41
 
 **A client blocking cvar corrections can no longer ready up for a match.** Operator ruling

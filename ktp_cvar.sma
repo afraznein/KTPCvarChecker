@@ -2,10 +2,21 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.41
- *   Release Date:      2026-09-13
+ *   Current Version:   7.42
+ *   Release Date:      2026-09-18
  *
  *   Changelog:
+ *   7.42 2026-09-18 - FIXED: ex_interp below the floor is corrected and
+ *                      continues -- it no longer escalates to BLOCKED, so it
+ *                      cannot refuse .ready. 0.009 was the floor itself until
+ *                      7.38, so a long-legal value silently became a match
+ *                      stopper once KTPMatchHandler 7.41 read the blocked
+ *                      state. The floor stays 0.01 and the correction still
+ *                      goes out; only the escalation is dropped, and only for
+ *                      this cvar below its floor. Every other cvar, and
+ *                      ex_interp above its ceiling, still blocks.
+ *                    * ADDED: INTERP_UNCORRECTED log line, once per streak,
+ *                      where FILTERSTUFF_BLOCKED used to be written for it
  *   7.41 2026-09-13 - ADDED: ktp_cvar_get_blocked native + "ktp_cvar_checker"
  *                      library, so KTPMatchHandler can refuse .ready while a
  *                      player is blocking an enforced correction. Blocked
@@ -295,7 +306,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.41"
+#define PLUGIN_VERSION "7.42"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -1789,6 +1800,34 @@ stock fn_enforce_cvar(id, cvar_index, const s_CVARNAME[], Float: valueFromPlayer
 
 	if (gs_logname[0] == 0 || gs_logauthid[0] == 0) {
 		log_amx("[%s] WARNING: Player %d disconnected before logging violation", PLUGIN_NAME, id)
+		return PLUGIN_CONTINUE
+	}
+
+	// ex_interp UNDER its floor is corrected and continues -- it is the one
+	// violation that never becomes a block. 0.009 was this cvar's own floor
+	// until 7.38, so the population still holding it is large and was never
+	// warned, and gb_filterstuff_warned is exactly what ktp_cvar_get_blocked
+	// reports and KTPMatchHandler refuses .ready on. Every other cvar still
+	// blocks at MAX_ENFORCE_ATTEMPTS, and so does ex_interp OVER its ceiling:
+	// that value is chosen, not inherited.
+	if (cvar_index == gi_exInterpIdx && !ceiling
+		&& gi_enforce_attempts[id][cvar_index] >= MAX_ENFORCE_ATTEMPTS) {
+		// == MAX, not >=: the counter rises on every attempt and only an
+		// in-range answer clears it, so this says it once per streak without a
+		// second flag -- and a new per-player flag owes a clear in BOTH
+		// client_putinserver and client_disconnected. The cost of equality is
+		// that the disconnect-mid-enforcement return above can spend the
+		// attempt that would have been MAX, and then nothing is ever logged.
+		if (gi_enforce_attempts[id][cvar_index] == MAX_ENFORCE_ATTEMPTS) {
+			client_print(id, print_chat, "[KTP] Your %s is below the minimum and corrections are not reaching your client.", s_CVARNAME)
+			client_print(id, print_chat, "[KTP] In console type: cl_filterstuffcmd 0; %s %s", s_CVARNAME, required)
+			client_print(id, print_console, "KTP: %s is %.6f, below the enforced minimum of %s.", s_CVARNAME, valueFromPlayer, required)
+			client_print(id, print_console, "KTP: corrections are not reaching your client. Type: cl_filterstuffcmd 0; %s %s", s_CVARNAME, required)
+			log_amx("[%s] INTERP_UNCORRECTED: %s <%s> (%s) - %s stuck at %.6f (required %s) after %d attempts, not blocking",
+				PLUGIN_NAME, gs_logname, gs_logauthid, gs_logip, s_CVARNAME, valueFromPlayer, required, gi_enforce_attempts[id][cvar_index])
+		}
+		// Same anti-spam stop as the blocked path: three corrections the client
+		// did not take are not made truer by a fourth every rotation.
 		return PLUGIN_CONTINUE
 	}
 
