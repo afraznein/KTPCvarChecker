@@ -6,3 +6,4 @@
 # The fleet runs this file with CRLF endings, and the distributor overwrites it whole, so keep the
 # committed bytes identical to the live copy.
 data/lang/ktp_cvar.txt -text
+.githooks/* text eol=lf
