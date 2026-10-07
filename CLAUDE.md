@@ -40,6 +40,17 @@ This will:
 - `compile.sh` - WSL compile script
 - `compiled/` - Compiled .amxx output
 
+⛔ **This repo carries NO map assets, and an audit figure says otherwise.** The 2026-09-11
+`KTP Git Projects` disk audit kept `Defunct/KTPCvarChecker` on the grounds that it held "~50
+untracked map assets". That directory was promoted to this repo (operator: *"KTPCvarChecker is not
+defunct, so yes deliberate"*, 2026-10-05) and nothing map-shaped came with it — no `.bsp`, `.wad`,
+`.res` or `.nav` anywhere in the tree.
+🔑 **The figure was never verified and cannot be: the files were UNTRACKED, so no probe can tell
+moved from copied from deleted.** ⛔ **Do not read their absence here as a loss, and do not re-quote
+the count as measured.** The estate's actual map assets live in
+`KTP DoD Server/serverfiles/dod/maps/` and a few at the project root — look there before concluding
+anything about these.
+
 ## Purpose
 Real-time client cvar enforcement plugin. Uses KTPAMXX's `client_cvar_changed` forward to detect when clients respond to cvar queries and validates values against allowed ranges.
 
