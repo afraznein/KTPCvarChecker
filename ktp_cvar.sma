@@ -2,10 +2,13 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.42
- *   Release Date:      2026-09-18
+ *   Current Version:   7.43
+ *   Release Date:      2026-10-19
  *
  *   Changelog:
+ *   7.43 2026-10-19 - NETOBS_SNAPSHOT: the five net cvars the rotation already polls, logged per player
+ *                     when first complete, on change, and at match start / half end / match end with the
+ *                     match id; closes the engine's per-client net slice (ktp_net_flush) at those boundaries.
  *   7.42 2026-09-18 - FIXED: ex_interp below the floor is corrected and
  *                      continues -- it no longer escalates to BLOCKED, so it
  *                      cannot refuse .ready. 0.009 was the floor itself until
@@ -306,7 +309,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.42"
+#define PLUGIN_VERSION "7.43"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -609,6 +612,25 @@ new gp_cvar_silent_tier_secs
 // gb_netobsSampled. (LAGCOMP_UNKNOWN can gate safely only because
 // fn_lagcomp_read returns 0..3 and can never collide.)
 #define NETOBS_UNKNOWN -1
+
+// ============================================================================
+// NETCODE SNAPSHOT (v7.40) -- persist what the rotation already polls.
+//   The five net cvars (cl_updaterate cl_cmdrate rate ex_interp fps_max) sit
+//   contiguously at the tail of gs_cvars; their last answered values are kept
+//   per player and logged as one NETOBS_SNAPSHOT line when all five are first
+//   known, on every later change, and at match start / half end / match end
+//   carrying the match id and half -- so a half can be joined to the settings
+//   the client ran in it. The same boundaries close the engine's per-client
+//   net slice (`ktp_net_flush <match> <half>`). Log-only, enforces nothing.
+// ============================================================================
+#define NETSNAP_COUNT 5
+#define NETSNAP_LEN 12
+#define NETSNAP_ALL ((1 << NETSNAP_COUNT) - 1)
+new gi_netSnapFirst = -1                 // gs_cvars index of cl_updaterate, derived at init
+new gs_netSnap[MAX_PLAYERS + 1][NETSNAP_COUNT][NETSNAP_LEN]
+new gi_netSnapKnown[MAX_PLAYERS + 1]     // bitmask over the five
+new gs_netMatchId[64]
+new gi_netHalf
 // Guards float equality at the boundary (ex_interp 0.01 vs 1/100). Sized for
 // float representation error, which is ~1e-9 at these magnitudes -- 1e-4 was
 // three orders larger than that and silently excused a real 0.1ms shortfall.
@@ -727,6 +749,21 @@ public plugin_init() {
 			PLUGIN_NAME)
 	}
 
+	// Derived the same way: the snapshot reads gs_cvars by offset from
+	// cl_updaterate, so the five must be contiguous and in this order.
+	gi_netSnapFirst = -1
+	for (new i = 0; i + NETSNAP_COUNT <= TOTAL_CVARS; i++) {
+		if (equal(gs_cvars[i], "cl_updaterate") && equal(gs_cvars[i + 1], "cl_cmdrate")
+			&& equal(gs_cvars[i + 2], "rate") && equal(gs_cvars[i + 3], "ex_interp")
+			&& equal(gs_cvars[i + 4], "fps_max")) {
+			gi_netSnapFirst = i
+			break
+		}
+	}
+	if (gi_netSnapFirst == -1) {
+		log_amx("[%s] NETOBS: net cvars not contiguous in gs_cvars -- NETOBS_SNAPSHOT is INERT",
+			PLUGIN_NAME)
+	}
 	// Globals load as 0, and 0 is a VALID sampled lagcomp state (lc=0, lw=0) —
 	// the unknown sentinel must be set explicitly or an unsampled slot reads as
 	// the exact population this feature hunts. Re-fires per map change in
@@ -898,6 +935,7 @@ public client_putinserver(id) {
 	gb_netobsSampled[id] = false
 	gb_netInterpSeen[id] = false
 	gb_netInterpWarned[id] = false
+	gi_netSnapKnown[id] = 0
 	// A new connection can beat the previous occupant's disconnect cleanup —
 	// a stale flag here would attribute the old occupant's edit to the new one
 	gb_infoDirty[id] = false
@@ -984,6 +1022,7 @@ public client_disconnected(id, bool:drop, message[], maxlen) {
 	gb_netobsSampled[id] = false
 	gb_netInterpSeen[id] = false
 	gb_netInterpWarned[id] = false
+	gi_netSnapKnown[id] = 0
 	gb_infoDirty[id] = false
 
 	// Flush any pending Discord violations for this player (sends + clears the slot)
@@ -1089,6 +1128,7 @@ public fn_querycvar(id, const s_CVARNAME[], const s_VALUE[]) {
 	gb_queryJustHandled[id] = true
 
 	fn_note_tier_response(id, cvar_index)
+	fn_netsnap_note(id, cvar_index, s_VALUE)
 
 	if (cvar_index >= MIN_MAX_CVAR_START) {
 		fn_checkaltallowed(id, cvar_index, s_CVARNAME, valueFromPlayer,
@@ -1394,6 +1434,71 @@ stock fn_lagcomp_log(id, const event[], flags, prev) {
 // ex_interp is deliberately not read here: it is NOT a transmitted userinfo
 // field (engine info.cpp g_info_important_fields), so get_user_info returns
 // empty for it on every player.
+// One answered net cvar. Logs when the five are first complete and on every later change.
+stock fn_netsnap_note(id, cvar_index, const s_VALUE[]) {
+	if (gi_netSnapFirst < 0)
+		return
+	new k = cvar_index - gi_netSnapFirst
+	if (k < 0 || k >= NETSNAP_COUNT)
+		return
+	new bit = 1 << k
+	if ((gi_netSnapKnown[id] & bit) && equal(gs_netSnap[id][k], s_VALUE))
+		return
+	copy(gs_netSnap[id][k], NETSNAP_LEN - 1, s_VALUE)
+	new bool:wasComplete = (gi_netSnapKnown[id] == NETSNAP_ALL)
+	gi_netSnapKnown[id] |= bit
+	if (gi_netSnapKnown[id] == NETSNAP_ALL)
+		fn_netsnap_log(id, wasComplete ? "change" : "first")
+}
+
+stock fn_netsnap_log(id, const why[]) {
+	// lc/lw ride along from the lag-comp sample; -1 until that sample has run.
+	new lc = -1, lw = -1
+	if (gi_lagcompState[id] != LAGCOMP_UNKNOWN) {
+		lc = gi_lagcompState[id] & 1
+		lw = (gi_lagcompState[id] >> 1) & 1
+	}
+	new detail[192]
+	formatex(detail, charsmax(detail),
+		"match=%s half=%d why=%s updaterate=%s cmdrate=%s rate=%s interp=%s fps_max=%s lc=%d lw=%d",
+		gs_netMatchId[0] ? gs_netMatchId : "-", gi_netHalf, why,
+		gs_netSnap[id][0], gs_netSnap[id][1], gs_netSnap[id][2], gs_netSnap[id][3], gs_netSnap[id][4],
+		lc, lw)
+	fn_netobs_log(id, "NETOBS_SNAPSHOT", detail)
+}
+
+// Every player whose five are known, at a match boundary.
+stock fn_netsnap_boundary(const why[]) {
+	for (new id = 1; id <= MAX_PLAYERS; id++) {
+		if (!is_user_connected(id) || is_user_bot(id) || is_user_hltv(id))
+			continue
+		if (gi_netSnapKnown[id] == NETSNAP_ALL)
+			fn_netsnap_log(id, why)
+	}
+}
+
+// KTPMatchHandler forwards. half: 1, 2, 101+ for OT rounds.
+public ktp_match_start(const matchId[], const map[], matchType, half) {
+	copy(gs_netMatchId, charsmax(gs_netMatchId), matchId)
+	gi_netHalf = half
+	// Closes whatever the engine accumulated before live -- warmup, or the
+	// previous half's tail -- under its own label, so the half starts clean.
+	server_cmd("ktp_net_flush %s prelive", matchId)
+	fn_netsnap_boundary("start")
+}
+
+public ktp_half_end(const matchId[], const map[], matchType, half, team1Score, team2Score) {
+	server_cmd("ktp_net_flush %s %d", matchId, half)
+	fn_netsnap_boundary("half_end")
+}
+
+public ktp_match_end(const matchId[], const map[], matchType, team1Score, team2Score) {
+	server_cmd("ktp_net_flush %s %d", matchId, gi_netHalf)
+	fn_netsnap_boundary("match_end")
+	gs_netMatchId[0] = 0
+	gi_netHalf = 0
+}
+
 stock bool:fn_netobs_read(id, &rate, &updaterate) {
 	new buf[16]
 

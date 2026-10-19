@@ -9,6 +9,21 @@ All notable changes to KTP Cvar Checker will be documented in this file.
   distributor would have stripped keys fleet-wide. `FCOS_LANG_LOG_ENTRY` prints the KTP value with
   `%s`, matching the bound string 7.38 passes. Live md5 `9bde50a64dba40c92eaf58134cca6616`.
 
+## 7.43
+
+**NETOBS_SNAPSHOT: the net cvars the rotation already polls are now persisted.** The plugin has
+queried `cl_updaterate`, `cl_cmdrate`, `rate`, `ex_interp` and `fps_max` every few seconds since
+7.3x and kept nothing but violations. One `event=NETOBS_SNAPSHOT` line per player now carries all
+five, with `lc`/`lw` from the lag-comp sample: when the five are first complete, on every later
+change, and at match start / half end / match end with the match id and half. The boundaries
+come from KTPMatchHandler's `ktp_match_start`, `ktp_half_end` and `ktp_match_end` forwards.
+
+**The same boundaries issue `ktp_net_flush <match> <half>`** (KTP-ReHLDS `net_client:` slice:
+per-client frame-time and packet-gap histograms, cmd loss, interp rewrites, stale-delta count),
+so the engine's per-client numbers and the client's declared settings share a half label. The
+flush at match start is labelled `prelive` and holds warmup.
+
+Log-only. Enforces nothing. Coordination workstream `netcode-player-settings`.
 ## 7.42
 
 **A `ex_interp` below the floor is corrected and continues -- it never becomes a block, so it cannot
