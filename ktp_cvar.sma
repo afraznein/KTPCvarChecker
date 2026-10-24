@@ -2,10 +2,12 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.43
- *   Release Date:      2026-10-19
+ *   Current Version:   7.44
+ *   Release Date:      2026-10-24
  *
  *   Changelog:
+ *   7.44 2026-10-24 - ktp_net_flush every 60 s while a half is live, so the engine's per-client net
+ *                     slice comes in minutes, not halves; chat complaints can be read against the minute.
  *   7.43 2026-10-19 - NETOBS_SNAPSHOT: the five net cvars the rotation already polls, logged per player
  *                     when first complete, on change, and at match start / half end / match end with the
  *                     match id; closes the engine's per-client net slice (ktp_net_flush) at those boundaries.
@@ -309,7 +311,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.43"
+#define PLUGIN_VERSION "7.44"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -394,6 +396,9 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 // Deferred enforcement (moves expensive work out of opcode handler to prevent frame freezes)
 // Uses per-cvar bitmask to queue multiple violations per player per frame
 #define TASK_DEFER_ENFORCE 3000
+// v7.44: one global task, not per player -- the flush closes every client's slice at once.
+#define TASK_NETFLUSH_MINUTE 9100
+#define NETFLUSH_MINUTE_SECS 60.0
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
 new g_deferPendingHi[MAX_PLAYERS + 1]      // cvar indices from 32 up
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
@@ -1485,14 +1490,28 @@ public ktp_match_start(const matchId[], const map[], matchType, half) {
 	// previous half's tail -- under its own label, so the half starts clean.
 	server_cmd("ktp_net_flush %s prelive", matchId)
 	fn_netsnap_boundary("start")
+	// Minute slices for the live half. The half-end flush closes the last partial minute.
+	// A map change drops the task with the plugin, and the next half's start re-arms it.
+	remove_task(TASK_NETFLUSH_MINUTE)
+	set_task(NETFLUSH_MINUTE_SECS, "fn_netflush_minute", TASK_NETFLUSH_MINUTE, _, _, "b")
+}
+
+public fn_netflush_minute() {
+	if (gs_netMatchId[0] == EOS) {
+		remove_task(TASK_NETFLUSH_MINUTE)
+		return
+	}
+	server_cmd("ktp_net_flush %s %d", gs_netMatchId, gi_netHalf)
 }
 
 public ktp_half_end(const matchId[], const map[], matchType, half, team1Score, team2Score) {
+	remove_task(TASK_NETFLUSH_MINUTE)
 	server_cmd("ktp_net_flush %s %d", matchId, half)
 	fn_netsnap_boundary("half_end")
 }
 
 public ktp_match_end(const matchId[], const map[], matchType, team1Score, team2Score) {
+	remove_task(TASK_NETFLUSH_MINUTE)
 	server_cmd("ktp_net_flush %s %d", matchId, gi_netHalf)
 	fn_netsnap_boundary("match_end")
 	gs_netMatchId[0] = 0

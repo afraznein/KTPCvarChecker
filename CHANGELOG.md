@@ -2,6 +2,16 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.44
+
+**`ktp_net_flush` every 60 s while a half is live.** 7.43 closed the engine's per-client net slice
+(KTP-ReHLDS #48/#49) only at match start, half end and match end, so a half was one row per player.
+A complaint in chat at minute 14 could not be read against that player's own numbers for minute 14.
+From 7.44 a global task issues `ktp_net_flush <match> <half>` every 60 s from `ktp_match_start`; the
+half-end and match-end flushes cancel it and close the last partial minute. Rows keep the same
+`half` label, so a half is the sum of its minutes. About 20 lines per player per half; nothing else
+changes. Coordination workstream `netcode-player-settings` (FINDING_chat-anchors_20261024.md).
+
 ## Unreleased
 
 - **`data/lang/ktp_cvar.txt` now matches the file the fleet runs, byte for byte (CRLF).** The repo copy
