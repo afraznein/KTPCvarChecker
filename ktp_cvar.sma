@@ -2,10 +2,12 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.44
+ *   Current Version:   7.45
  *   Release Date:      2026-10-24
  *
  *   Changelog:
+ *   7.45 2026-10-24 - net slice flush every 10 s (was 60): one slice per server net: window and about
+ *                     one respawn wave, so a chat complaint points at the slice it follows.
  *   7.44 2026-10-24 - ktp_net_flush every 60 s while a half is live, so the engine's per-client net
  *                     slice comes in minutes, not halves; chat complaints can be read against the minute.
  *   7.43 2026-10-19 - NETOBS_SNAPSHOT: the five net cvars the rotation already polls, logged per player
@@ -311,7 +313,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.44"
+#define PLUGIN_VERSION "7.45"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -398,7 +400,9 @@ new bool:gb_hasViolations[MAX_PLAYERS + 1]  // Dirty flag: skip enforcement rese
 #define TASK_DEFER_ENFORCE 3000
 // v7.44: one global task, not per player -- the flush closes every client's slice at once.
 #define TASK_NETFLUSH_MINUTE 9100
-#define NETFLUSH_MINUTE_SECS 60.0
+// 10 s: the engine's own net: windows are 10 s, so each client slice sits on one of them; and
+// a respawn wave is ~8 s, so a complaint typed after respawning names the slice before it.
+#define NETFLUSH_MINUTE_SECS 10.0
 new g_deferPending[MAX_PLAYERS + 1]        // bits 0-31: cvar indices needing enforcement
 new g_deferPendingHi[MAX_PLAYERS + 1]      // cvar indices from 32 up
 new Float:g_deferValue[MAX_PLAYERS + 1][TOTAL_CVARS]     // player's bad value per cvar
