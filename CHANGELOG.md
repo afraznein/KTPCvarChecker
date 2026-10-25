@@ -2,6 +2,14 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.45
+
+**Net slice flush every 10 s, was 60.** The engine's server-wide `net:` windows are 10 s, so each
+client slice now sits on exactly one of them; a respawn wave is ~8 s, so a chat complaint typed
+after respawning points at the slice it follows; and a 3 s stall is 30% of a slice instead of 5%,
+where the p95 cannot miss it. About 6x the rows of 7.44 (about 2,900 per 12-player match). Ruled
+2026-10-24 (drew). Coordination workstream `netcode-player-settings`.
+
 ## 7.44
 
 **`ktp_net_flush` every 60 s while a half is live.** 7.43 closed the engine's per-client net slice
