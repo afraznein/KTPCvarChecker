@@ -2,6 +2,23 @@
 
 All notable changes to KTP Cvar Checker will be documented in this file.
 
+## 7.46
+
+**`cl_upspeed` is now observed, and nothing else changes.** The DoD client registers it, 7.13
+dropped it from enforcement, and no value has been ruled since -- so whether anybody runs a
+non-default value is simply unknown, and an enforcement decision needs that number first.
+One query at settle, logged as `NETOBS_CVAR`, same tier as `cl_cmdbackup`: no correction, no
+`.ready` effect, no entry in `gs_cvars`. Enforcement stays an operator ruling and this is not
+a step toward one; if the answer is nobody, there is nothing to rule on.
+
+The observe-only tier carries no publication obligation, which is what makes this reversible:
+`tools/check_published_cvars.py` compares `gs_cvars` against the public list by name in both
+directions and never reads `gs_observe_cvars`. `tools/test_check_published_cvars.py` now pins
+that in both directions, so a future change that starts reading the observe table fails there
+rather than turning an observation into a doc edit nobody expected.
+
+Coordination workstream `netcode-player-settings`.
+
 ## 7.45
 
 **Net slice flush every 10 s, was 60.** The engine's server-wide `net:` windows are 10 s, so each

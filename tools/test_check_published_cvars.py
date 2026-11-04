@@ -134,6 +134,23 @@ def main() -> int:
                    once(SMA, "#define M_PITCH_INDEX 2", "#define M_PITCH_INDEX 3", "sma index"), DOC,
                    "STALE BEHAVIOUR: M_PITCH_INDEX 3")
 
+    # --- The observe-only tier is outside this comparison, in BOTH directions ---
+    # The fixture observes a cvar the page never mentions. Nothing else pinned
+    # this, and an observe-only addition rests entirely on it: names are compared
+    # both ways, so if evaluate() ever read gs_observe_cvars, observing a cvar
+    # would oblige us to publish it and enforcement would become the only option.
+    expect_clean("observe-only cvar absent from the published page", SMA, DOC)
+    # Both controls below move the same name, so a clean result above cannot be
+    # the parser having gone blind on it.
+    expect_problem("the same name inside gs_cvars is drift",
+                   once(SMA, '"r_glowshellfreq",', '"cl_upspeed",', "observe -> enforced"), DOC,
+                   "ENFORCED BUT NOT PUBLISHED: cl_upspeed")
+    expect_problem("publishing an observe-only cvar is drift the other way",
+                   SMA, once(DOC, "| `r_fullbright` | `0` |",
+                             "| `cl_upspeed` | `320` | Observed, not enforced |\n| `r_fullbright` | `0` |",
+                             "published observe"),
+                   "PUBLISHED BUT NOT ENFORCED: cl_upspeed")
+
     # --- A parser that matches nothing must not read as agreement ---------------
     expect_problem("doc with no tables", SMA, "# Nothing here\n", "parsed zero enforced cvars")
 

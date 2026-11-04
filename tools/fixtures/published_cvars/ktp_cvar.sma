@@ -17,6 +17,9 @@ new gs_cvars[TOTAL_CVARS][] = {
 "lightgamma", "cl_updaterate", "rate", "ex_interp"
 }
 
+// Observed, never enforced, and deliberately absent from cvar_list.md.
+new gs_observe_cvars[1][] = { "cl_upspeed" }
+
 new gs_calvalues[TOTAL_CVARS][] = {
 "0", "1", "0.022", "2.2",          // r_glowshellfreq is the "engine default"
 "1.809", "100", "100000", "0.01"
