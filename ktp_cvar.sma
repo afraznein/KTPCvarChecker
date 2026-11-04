@@ -2,10 +2,12 @@
  *   Title:    KTP Cvar Settings (fcos)
  *   Author:   Nein_
  *
- *   Current Version:   7.45
- *   Release Date:      2026-10-24
+ *   Current Version:   7.46
+ *   Release Date:      2026-11-04
  *
  *   Changelog:
+ *   7.46 2026-11-04 - cl_upspeed added to the observe-only set: the DoD client registers it, 7.13
+ *                     dropped it, and no value has been ruled since. Logged, never enforced.
  *   7.45 2026-10-24 - net slice flush every 10 s (was 60): one slice per server net: window and about
  *                     one respawn wave, so a chat complaint points at the slice it follows.
  *   7.44 2026-10-24 - ktp_net_flush every 60 s while a half is live, so the engine's per-client net
@@ -313,7 +315,7 @@
 // ============================================================================
 
 #define PLUGIN_NAME    "KTP Cvar Checker"
-#define PLUGIN_VERSION "7.45"
+#define PLUGIN_VERSION "7.46"
 #define PLUGIN_AUTHOR  "Nein_"
 new const gs_year     = 2026;
 
@@ -649,7 +651,7 @@ new gi_netHalf
 // Kept OUT of gs_cvars deliberately -- everything in that array is validated
 // against gs_calvalues and corrected, and these have no defensible enforced
 // value. The point is to see what players run, not to make them run something.
-#define OBSERVE_CVARS_COUNT 1
+#define OBSERVE_CVARS_COUNT 2
 #define LAGCOMP_BOTH_ON 3
 new gi_lagcompState[MAX_PLAYERS + 1]   // LAGCOMP_UNKNOWN until sampled, else (lc | lw<<1)
 new gi_netRate[MAX_PLAYERS + 1]        // cache only -- never gate on its value
@@ -673,7 +675,9 @@ new bool:gb_infoDirty[MAX_PLAYERS + 1]
 
 // cl_nopred and cl_nodelta were queried here from 7.34 to 7.37 and answered
 // "Bad CVAR request" every single time -- the DoD client does not register them.
-new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_cmdbackup" }
+// cl_upspeed (7.46) is here and not in gs_cvars because no value has been ruled
+// for it, and every name in that array is corrected to one. Observe first.
+new gs_observe_cvars[OBSERVE_CVARS_COUNT][] = { "cl_cmdbackup", "cl_upspeed" }
 // One sanity line per map LOAD, keyed on this bool and not the map name:
 // halftime and every OT round changelevel to the SAME map, and extension-mode
 // globals survive the changelevel — a name compare stays silent for exactly
